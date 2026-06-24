@@ -1,0 +1,28 @@
+@import "tailwindcss";
+
+* {
+  font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: #111827; }
+::-webkit-scrollbar-thumb { background: #374151; border-radius: 9999px; }
+::-webkit-scrollbar-thumb:hover { background: #6b7280; }
+
+/* ── Page transition animation ─────────────────── */
+@keyframes pageEnter {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.page-transition {
+  animation: pageEnter 0.28s cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
