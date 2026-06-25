@@ -5,7 +5,6 @@ import { useToast } from '../components/Toast';
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, CartesianGrid, LabelList,
 } from 'recharts';
-import { startRegistration } from '@simplewebauthn/browser';
 
 // Custom X-Axis tick: truncates long names to fit cleanly under each bar
 const CustomXAxisTick = ({ x, y, payload }) => {
@@ -68,28 +67,6 @@ const Dashboard = () => {
     }
   };
 
-  const handleRegisterDevice = async () => {
-    try {
-      const optRes = await api.registerPasskeyOptions();
-      const options = await optRes.json();
-      if (!optRes.ok) throw new Error(options.error || 'Failed to get registration options');
-
-      const attResp = await startRegistration({ optionsJSON: options });
-
-      const verRes = await api.verifyPasskeyRegistration(attResp);
-      const verData = await verRes.json();
-      if (!verRes.ok) throw new Error(verData.error || 'Verification failed');
-      
-      if (verData.verified) {
-        showToast('Device registered successfully! You can now login with your Phone Lock.', 'success');
-        setStats(prev => ({ ...prev, hasPasskey: true }));
-      }
-    } catch (err) {
-      console.error(err);
-      showToast(err.message || 'Registration cancelled or failed', 'error');
-    }
-  };
-
   // eslint-disable-next-line react-hooks/exhaustive-deps, react-hooks/set-state-in-effect
   useEffect(() => { load(); }, []);
 
@@ -116,30 +93,6 @@ const Dashboard = () => {
         <StatCard label="Top Product" value={stats?.topSellingProduct} sub={`${stats?.topSellingQty} units sold`} color="purple" icon="🏆" />
         <StatCard label="Yearly Sales" value={fmt(stats?.yearlySales)} sub={new Date().getFullYear()} color="yellow" icon="🗓️" />
       </div>
-
-      {/* Passkey Registration Banner */}
-      {!stats?.hasPasskey && (
-        <div className="bg-indigo-900/30 border border-indigo-500/30 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div>
-            <h3 className="text-indigo-300 font-semibold text-sm">Enable Quick Login</h3>
-            <p className="text-gray-400 text-xs mt-1">Register this device to login with FaceID, Fingerprint, or PIN.</p>
-          </div>
-          <button
-            onClick={handleRegisterDevice}
-            className="bg-indigo-600 hover:bg-indigo-500 text-white font-medium py-2 px-4 rounded-xl text-sm transition-colors shadow-lg shadow-indigo-900/50 whitespace-nowrap"
-          >
-            📱 Register Device
-          </button>
-        </div>
-      )}
-
-      {stats?.hasPasskey && (
-        <div className="bg-green-900/20 border border-green-500/30 rounded-xl p-3 flex items-center justify-center">
-          <span className="text-green-400 text-xs font-semibold flex items-center gap-2">
-            ✅ Phone Lock / FaceID is Active on your account
-          </span>
-        </div>
-      )}
 
       {/* Bar Chart */}
       <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5">
