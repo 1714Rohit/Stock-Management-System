@@ -323,8 +323,8 @@ const Purchase = () => {
         )}
       </div>
 
-      {/* ── Scrollable Content ── */}
-      <div className="flex-1 overflow-y-auto px-4 py-4 md:px-6 pb-24 md:pb-6">
+      {/* ── Main Content Area ── */}
+      <div className="flex-1 flex flex-col min-h-0 px-4 py-4 md:px-6 pb-24 md:pb-6">
         {loading ? (
           <p className="text-gray-500 text-sm text-center py-12">Loading...</p>
         ) : filteredHistory.length === 0 ? (
@@ -334,7 +334,7 @@ const Purchase = () => {
         ) : (
           <>
             {/* Mobile cards */}
-            <div className="md:hidden space-y-3">
+            <div className="md:hidden overflow-y-auto space-y-3">
               {filteredHistory.map(h => (
                 <div key={h.id} className="bg-gray-900 border border-gray-800 rounded-2xl p-3">
                   <div className="flex justify-between items-start mb-1">
@@ -351,10 +351,10 @@ const Purchase = () => {
             </div>
 
             {/* Desktop table — sticky header */}
-            <div className="hidden md:block bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
-              <div className="overflow-auto">
+            <div className="hidden md:flex flex-col flex-1 bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden min-h-0">
+              <div className="overflow-y-auto flex-1">
                 <table className="w-full text-sm">
-                  <thead className="sticky top-0 z-10 border-b border-gray-800">
+                  <thead className="sticky top-0 z-10 border-b border-gray-800 shadow-sm">
                     <tr className="text-left text-xs text-gray-500 uppercase tracking-wider">
                       <th className="px-5 py-4 font-semibold bg-gray-900">No.</th>
                       <th className="px-5 py-4 font-semibold bg-gray-900">Product</th>

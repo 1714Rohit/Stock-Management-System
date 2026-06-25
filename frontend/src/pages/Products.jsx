@@ -57,6 +57,9 @@ const Products = () => {
   const [editProduct, setEditProduct] = useState(null);
   const [form, setForm] = useState(initialForm);
   const [saving, setSaving] = useState(false);
+  const [sellModalOpen, setSellModalOpen] = useState(false);
+  const [sellProduct, setSellProduct] = useState(null);
+  const [sellQuantity, setSellQuantity] = useState(1);
   const { showToast, ToastComponent } = useToast();
 
   const load = async () => {
@@ -108,6 +111,30 @@ const Products = () => {
       if (res.ok) { showToast('Product deleted'); load(); }
       else showToast('Failed to delete', 'error');
     } catch { showToast('Error deleting', 'error'); }
+  };
+
+  const openSell = (p) => {
+    setSellProduct(p);
+    setSellQuantity(1);
+    setSellModalOpen(true);
+  };
+
+  const handleSellSubmit = async (e) => {
+    e.preventDefault();
+    if (!sellProduct) return;
+    setSaving(true);
+    try {
+      const res = await api.recordSale({
+        product_id: sellProduct.id,
+        quantity: parseInt(sellQuantity),
+      });
+      const data = await res.json();
+      if (!res.ok) return showToast(data.error || 'Failed to record sale', 'error');
+      showToast(`Sale of ${sellQuantity} × ${sellProduct.name} recorded!`);
+      setSellModalOpen(false);
+      load();
+    } catch { showToast('Error recording sale', 'error'); }
+    finally { setSaving(false); }
   };
 
   const filtered = products.filter(p => p.name.toLowerCase().includes(search.toLowerCase()));
@@ -179,6 +206,7 @@ const Products = () => {
                 <div><p className="text-gray-500">Bought</p><p className="font-bold text-blue-300">{p.total_purchased}</p></div>
               </div>
               <div className="flex gap-2 mt-3">
+                <button onClick={() => openSell(p)} disabled={p.stock <= 0} className="flex-1 text-xs bg-emerald-950/40 hover:bg-emerald-900/50 text-emerald-300 border border-emerald-900/30 py-1.5 rounded-lg transition-colors disabled:opacity-50">Sell</button>
                 <button onClick={() => openEdit(p)} className="flex-1 text-xs bg-gray-800 hover:bg-gray-700 text-white py-1.5 rounded-lg transition-colors">Edit</button>
                 <button onClick={() => handleDelete(p.id, p.name)} className="flex-1 text-xs bg-red-950/40 hover:bg-red-900/50 text-red-300 border border-red-900/30 py-1.5 rounded-lg transition-colors">Delete</button>
               </div>
@@ -213,6 +241,7 @@ const Products = () => {
                     <td className="px-5 py-4">{stockBadge(p)}</td>
                     <td className="px-5 py-4">
                       <div className="flex gap-2">
+                        <button onClick={() => openSell(p)} disabled={p.stock <= 0} className="text-xs bg-emerald-950/40 hover:bg-emerald-900/50 text-emerald-300 border border-emerald-900/30 px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50">Sell</button>
                         <button onClick={() => openEdit(p)} className="text-xs bg-gray-800 hover:bg-gray-700 text-white px-3 py-1.5 rounded-lg transition-colors">Edit</button>
                         <button onClick={() => handleDelete(p.id, p.name)} className="text-xs bg-red-950/40 hover:bg-red-900/50 text-red-300 border border-red-900/30 px-3 py-1.5 rounded-lg transition-colors">Delete</button>
                       </div>
@@ -267,6 +296,52 @@ const Products = () => {
                   <button type="button" onClick={() => { setModalOpen(false); setEditProduct(null); }} className="flex-1 bg-gray-800 hover:bg-gray-700 text-white text-sm font-medium py-2.5 rounded-xl transition-colors">Cancel</button>
                   <button type="submit" disabled={saving} className="flex-1 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-60 text-white text-sm font-semibold py-2.5 rounded-xl transition-colors shadow-lg shadow-indigo-900/40">
                     {saving ? 'Saving...' : 'Save Product'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Quick Sell Modal */}
+      {sellModalOpen && sellProduct && (
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-sm" onClick={(e) => { if (e.target === e.currentTarget) setSellModalOpen(false); }}>
+          <div className="flex min-h-full items-center justify-center p-4">
+            <div className="w-full max-w-sm bg-gray-900 border border-gray-800 rounded-2xl p-6 shadow-2xl">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-bold text-white">Quick Sell</h3>
+                <button onClick={() => setSellModalOpen(false)} className="text-gray-500 hover:text-red-600 text-2xl leading-none">&times;</button>
+              </div>
+              <form onSubmit={handleSellSubmit} className="space-y-4">
+                <div className="bg-gray-800/60 rounded-xl p-3 border border-gray-700">
+                  <p className="text-sm font-medium text-white">{sellProduct.name}</p>
+                  <div className="flex justify-between text-xs mt-1">
+                    <span className="text-gray-400">Sell Price: <span className="text-emerald-400">{fmt(sellProduct.price)}</span></span>
+                    <span className="text-gray-400">Stock: <span className={`font-bold ${sellProduct.stock === 0 ? 'text-red-400' : 'text-white'}`}>{sellProduct.stock}</span></span>
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-400 mb-1.5">Quantity to Sell</label>
+                  <input
+                    type="number" min="1" max={sellProduct.stock} required
+                    className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-emerald-500"
+                    value={sellQuantity}
+                    onChange={e => setSellQuantity(e.target.value)}
+                  />
+                </div>
+                {sellQuantity > 0 && (
+                  <div className="flex justify-between items-center bg-emerald-950/30 border border-emerald-900/40 rounded-xl px-4 py-3">
+                    <span className="text-sm text-gray-300">Total Bill</span>
+                    <span className="text-xl font-bold text-emerald-400">
+                      {fmt(parseFloat(sellProduct.price) * parseInt(sellQuantity))}
+                    </span>
+                  </div>
+                )}
+                <div className="flex gap-3 pt-2">
+                  <button type="button" onClick={() => setSellModalOpen(false)} className="flex-1 bg-gray-800 hover:bg-gray-700 text-white text-sm font-medium py-2.5 rounded-xl transition-colors">Cancel</button>
+                  <button type="submit" disabled={saving} className="flex-1 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 text-white text-sm font-semibold py-2.5 rounded-xl transition-colors shadow-lg shadow-emerald-900/40">
+                    {saving ? 'Processing...' : 'Complete Sale'}
                   </button>
                 </div>
               </form>

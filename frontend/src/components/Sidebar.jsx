@@ -1,5 +1,6 @@
-import 'react';
-import { NavLink } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { NavLink, useLocation } from 'react-router-dom';
+import { api } from '../api/client';
 import {
   LayoutDashboard,
   Package,
@@ -17,6 +18,39 @@ const navItems = [
 ];
 
 const Sidebar = ({ shopName }) => {
+  const location = useLocation();
+  const [alertCount, setAlertCount] = useState(0);
+
+  useEffect(() => {
+    const fetchAlerts = async () => {
+      try {
+        const res = await api.getStockAlerts();
+        if (res.ok) {
+          const data = await res.json();
+          const currentTotal = data.length || 0;
+          
+          if (location.pathname === '/stock-alert') {
+            localStorage.setItem('lastSeenAlertCount', currentTotal);
+            setAlertCount(0);
+          } else {
+            const lastSeen = parseInt(localStorage.getItem('lastSeenAlertCount') || '0', 10);
+            if (currentTotal > lastSeen) {
+              setAlertCount(currentTotal - lastSeen);
+            } else {
+              if (currentTotal < lastSeen) {
+                localStorage.setItem('lastSeenAlertCount', currentTotal);
+              }
+              setAlertCount(0);
+            }
+          }
+        }
+      } catch (e) {}
+    };
+    fetchAlerts();
+    window.addEventListener('inventory_changed', fetchAlerts);
+    return () => window.removeEventListener('inventory_changed', fetchAlerts);
+  }, [location.pathname]);
+
   return (
     <aside className="hidden md:flex flex-col w-64 min-h-screen bg-gray-900 border-r border-gray-800 fixed left-0 top-0 z-30">
       {/* Logo / Shop Name */}
@@ -39,15 +73,22 @@ const Sidebar = ({ shopName }) => {
             key={to}
             to={to}
             className={({ isActive }) =>
-              `flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 ${
+              `flex items-center justify-between px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 ${
                 isActive
                   ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/50'
                   : 'text-gray-400 hover:text-white hover:bg-gray-800'
               }`
             }
           >
-            <Icon size={18} strokeWidth={1.8} />
-            {label}
+            <div className="flex items-center gap-3">
+              <Icon size={18} strokeWidth={1.8} />
+              {label}
+            </div>
+            {to === '/stock-alert' && alertCount > 0 && (
+              <span className="bg-red-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm">
+                {alertCount}
+              </span>
+            )}
           </NavLink>
         ))}
       </nav>

@@ -242,16 +242,16 @@ const Sales = () => {
         )}
 
         {/* Recent Sales History */}
-        <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
-          <div className="px-5 py-4 border-b border-gray-800">
+        <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden flex flex-col h-[400px] md:h-[500px]">
+          <div className="px-5 py-4 border-b border-gray-800 flex-shrink-0">
             <h3 className="text-sm font-semibold text-white">Recent Sales History</h3>
           </div>
           {history.length === 0 ? (
             <p className="text-gray-500 text-sm text-center py-8">No sales recorded yet.</p>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="sticky top-0 z-10 border-b border-gray-800">
+            <div className="overflow-auto flex-1">
+              <table className="w-full text-sm relative">
+                <thead className="sticky top-0 z-10 border-b border-gray-800 shadow-sm">
                   <tr className="text-left text-xs text-gray-500 uppercase tracking-wider">
                     <th className="px-5 py-3 font-semibold bg-gray-900">No.</th>
                     <th className="px-5 py-3 font-semibold bg-gray-900">Product</th>

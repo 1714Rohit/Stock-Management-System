@@ -1,4 +1,6 @@
+import { useEffect, useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
+import { api } from '../api/client';
 import {
   LayoutDashboard,
   Package,
@@ -44,6 +46,37 @@ const MobileNav = () => {
   const activeIdx = Math.max(0, navItems.findIndex(n => n.to === location.pathname));
   const path = buildPath(activeIdx);
   const ActiveIcon = navItems[activeIdx].Icon;
+  const [alertCount, setAlertCount] = useState(0);
+
+  useEffect(() => {
+    const fetchAlerts = async () => {
+      try {
+        const res = await api.getStockAlerts();
+        if (res.ok) {
+          const data = await res.json();
+          const currentTotal = data.length || 0;
+          
+          if (location.pathname === '/stock-alert') {
+            localStorage.setItem('lastSeenAlertCount', currentTotal);
+            setAlertCount(0);
+          } else {
+            const lastSeen = parseInt(localStorage.getItem('lastSeenAlertCount') || '0', 10);
+            if (currentTotal > lastSeen) {
+              setAlertCount(currentTotal - lastSeen);
+            } else {
+              if (currentTotal < lastSeen) {
+                localStorage.setItem('lastSeenAlertCount', currentTotal);
+              }
+              setAlertCount(0);
+            }
+          }
+        }
+      } catch (e) {}
+    };
+    fetchAlerts();
+    window.addEventListener('inventory_changed', fetchAlerts);
+    return () => window.removeEventListener('inventory_changed', fetchAlerts);
+  }, [location.pathname]);
 
   return (
     <nav
@@ -81,7 +114,7 @@ const MobileNav = () => {
         >
           {/* White circle bubble */}
           <span
-            className="flex items-center justify-center rounded-full bg-white shadow-lg border-4 border-gray-900"
+            className="flex items-center justify-center rounded-full bg-white shadow-lg border-4 border-gray-900 relative"
             style={{
               width: '54px',
               height: '54px',
@@ -90,6 +123,11 @@ const MobileNav = () => {
             }}
           >
             <ActiveIcon size={24} strokeWidth={2} />
+            {navItems[activeIdx].to === '/stock-alert' && alertCount > 0 && (
+              <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full border-2 border-white shadow-sm">
+                {alertCount}
+              </span>
+            )}
           </span>
           <span className="text-xs font-bold text-white mt-1 drop-shadow-md tracking-wide">
             {navItems[activeIdx].label}
@@ -110,7 +148,14 @@ const MobileNav = () => {
                 className={`flex flex-col items-center gap-1 transition-opacity duration-300 ${isActive ? 'opacity-0' : 'opacity-100'}`}
                 style={{ transform: 'translateY(8px)' }}
               >
-                <Icon size={20} strokeWidth={1.6} className="text-gray-300" />
+                <div className="relative">
+                  <Icon size={20} strokeWidth={1.6} className="text-gray-300" />
+                  {to === '/stock-alert' && alertCount > 0 && (
+                    <span className="absolute -top-2 -right-3 bg-red-500 text-white text-[9px] font-bold px-1 py-0.5 rounded-full shadow-sm">
+                      {alertCount}
+                    </span>
+                  )}
+                </div>
                 <span className="text-[10px] font-medium text-gray-400 tracking-wider uppercase">{label}</span>
               </span>
             </NavLink>

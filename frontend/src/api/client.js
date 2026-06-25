@@ -1,4 +1,4 @@
-const API_BASE = 'http://localhost:5000/api';
+const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
 
 const getToken = () => localStorage.getItem('token');
 
@@ -11,6 +11,10 @@ const request = async (endpoint, options = {}) => {
   };
 
   const res = await fetch(`${API_BASE}${endpoint}`, { ...options, headers });
+
+  if (res.ok && options.method && ['POST', 'PUT', 'DELETE'].includes(options.method)) {
+    window.dispatchEvent(new Event('inventory_changed'));
+  }
 
   if (res.status === 401 || res.status === 403) {
     localStorage.removeItem('token');
