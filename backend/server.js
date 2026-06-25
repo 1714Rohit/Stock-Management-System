@@ -220,15 +220,15 @@ app.post('/api/auth/verify-registration', async (req, res) => {
     });
 
     if (verification.verified && verification.registrationInfo) {
-      const { credentialPublicKey, credentialID, counter, credentialDeviceType, credentialBackedUp } = verification.registrationInfo;
+      const { credentialPublicKey, counter, credentialDeviceType, credentialBackedUp } = verification.registrationInfo;
       
       await db.query(
         `INSERT INTO passkeys (id, user_id, public_key, counter, device_type, backed_up, transports)
          VALUES (?, ?, ?, ?, ?, ?, ?)`,
         [
-          credentialID,
+          response.id, // The base64url string ID from the browser
           userId,
-          credentialPublicKey,
+          Buffer.from(credentialPublicKey), // Convert Uint8Array to Buffer for MySQL BLOB
           counter,
           credentialDeviceType,
           credentialBackedUp,
