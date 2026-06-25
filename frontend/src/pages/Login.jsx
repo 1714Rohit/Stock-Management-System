@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../api/client';
 import { useAuth } from '../context/AuthContext';
+import { startAuthentication } from '@simplewebauthn/browser';
 
 const EyeIcon = ({ open }) => (
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
@@ -48,6 +49,37 @@ const Login = () => {
     }
   };
 
+  const handlePasskeyLogin = async () => {
+    if (!email) {
+      setError('Please enter your email or username first to use FaceID/Fingerprint.');
+      return;
+    }
+    setError('');
+    setLoading(true);
+    try {
+      const optRes = await api.getPasskeyOptions(email);
+      const options = await optRes.json();
+      if (!optRes.ok) throw new Error(options.error || 'Failed to get passkey options');
+
+      const asseResp = await startAuthentication({ optionsJSON: options });
+
+      const verRes = await api.verifyPasskey(email, asseResp);
+      const verData = await verRes.json();
+      
+      if (!verRes.ok) throw new Error(verData.error || 'Verification failed');
+      
+      if (verData.verified) {
+        login(verData.token, verData.user, verData.shopName);
+        navigate('/dashboard');
+      }
+    } catch (err) {
+      console.error(err);
+      setError(err.message || 'Passkey login failed or cancelled');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-950 flex items-center justify-center px-4">
       <div className="w-full max-w-md">
@@ -71,18 +103,18 @@ const Login = () => {
               </div>
             )}
 
-            {/* Email */}
+            {/* Email / Username */}
             <div>
               <label className="block text-sm font-medium text-gray-400 mb-1.5">
-                Email Address
+                Email Address or Username
               </label>
               <input
-                type="email"
+                type="text"
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="Enter your email"
-                autoComplete="email"
+                placeholder="Enter email or username"
+                autoComplete="username"
                 className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-sm transition"
               />
             </div>
@@ -117,9 +149,25 @@ const Login = () => {
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-indigo-600 hover:bg-indigo-500 disabled:opacity-60 disabled:cursor-not-allowed text-white font-semibold py-3 rounded-xl transition-colors text-sm shadow-lg shadow-indigo-900/50"
+              className="w-full bg-indigo-600 hover:bg-indigo-500 disabled:opacity-60 disabled:cursor-not-allowed text-white font-semibold py-3 rounded-xl transition-colors text-sm shadow-lg shadow-indigo-900/50 mb-3"
             >
-              {loading ? 'Signing in...' : 'Sign In'}
+              {loading ? 'Signing in...' : 'Sign In with Password'}
+            </button>
+
+            <div className="relative flex py-2 items-center">
+              <div className="flex-grow border-t border-gray-700"></div>
+              <span className="flex-shrink-0 mx-4 text-gray-500 text-xs">OR</span>
+              <div className="flex-grow border-t border-gray-700"></div>
+            </div>
+
+            <button
+              type="button"
+              onClick={handlePasskeyLogin}
+              disabled={loading}
+              className="w-full mt-3 bg-gray-800 border border-gray-700 hover:bg-gray-700 text-white font-medium py-3 rounded-xl transition-colors text-sm flex items-center justify-center gap-2"
+            >
+              <span>📱</span>
+              Login with Phone Lock / FaceID
             </button>
 
           </form>

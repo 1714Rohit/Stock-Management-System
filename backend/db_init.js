@@ -65,14 +65,32 @@ async function init() {
     CREATE TABLE IF NOT EXISTS users (
       id INT AUTO_INCREMENT PRIMARY KEY,
       shop_id INT NOT NULL,
+      username VARCHAR(255) UNIQUE,
       email VARCHAR(255) NOT NULL UNIQUE,
       password_hash VARCHAR(255) NOT NULL,
+      current_challenge VARCHAR(255),
       role ENUM('admin', 'staff') NOT NULL DEFAULT 'admin',
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (shop_id) REFERENCES shops(id) ON DELETE CASCADE
     )
   `);
   console.log('Users table created/verified.');
+
+  // 5.5 Create passkeys table for WebAuthn
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS passkeys (
+      id VARCHAR(255) PRIMARY KEY,
+      user_id INT NOT NULL,
+      public_key BLOB NOT NULL,
+      counter BIGINT NOT NULL,
+      device_type VARCHAR(255) NOT NULL,
+      backed_up BOOLEAN NOT NULL,
+      transports VARCHAR(255),
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+  `);
+  console.log('Passkeys table created/verified.');
 
   // 6. Seed default Shop Alpha (id: 1)
   await db.query(`
@@ -85,9 +103,9 @@ async function init() {
   // 7. Seed default admin user
   const hash = await bcrypt.hash('admin123', 10);
   await db.query(`
-    INSERT INTO users (shop_id, email, password_hash, role)
-    VALUES (1, 'admin@shop.com', ?, 'admin')
-    ON DUPLICATE KEY UPDATE password_hash = VALUES(password_hash)
+    INSERT INTO users (shop_id, username, email, password_hash, role)
+    VALUES (1, 'admin', 'admin@shop.com', ?, 'admin')
+    ON DUPLICATE KEY UPDATE username = 'admin', password_hash = VALUES(password_hash)
   `, [hash]);
   console.log('Admin user seeded (admin@shop.com / admin123).');
 

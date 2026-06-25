@@ -34,6 +34,19 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password }),
     }),
+  getPasskeyOptions: (email) => 
+    fetch(`${API_BASE.replace('/api', '')}/api/auth/generate-authentication-options?email=${encodeURIComponent(email)}`),
+  verifyPasskey: (email, response) =>
+    fetch(`${API_BASE.replace('/api', '')}/api/auth/verify-authentication`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, response }),
+    }),
+  registerPasskeyOptions: () => request('/auth/generate-registration-options'),
+  verifyPasskeyRegistration: (response) => request('/auth/verify-registration', {
+    method: 'POST',
+    body: JSON.stringify({ response })
+  }),
 
   // Stats
   getStats: () => request('/stats'),

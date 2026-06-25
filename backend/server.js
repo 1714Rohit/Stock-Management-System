@@ -4,6 +4,12 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const db = require('./db');
 const verifyToken = require('./verifyToken');
+const {
+  generateRegistrationOptions,
+  verifyRegistrationResponse,
+  generateAuthenticationOptions,
+  verifyAuthenticationResponse
+} = require('@simplewebauthn/server');
 require('dotenv').config();
 
 const app = express();
@@ -18,11 +24,12 @@ app.use(express.json());
 // POST /api/auth/login
 app.post('/api/auth/login', async (req, res) => {
   const { email, password } = req.body;
-  if (!email || !password) return res.status(400).json({ error: 'Email and password required' });
+  if (!email || !password) return res.status(400).json({ error: 'Username/Email and password required' });
 
   try {
-    const [rows] = await db.query('SELECT * FROM users WHERE email = ?', [email]);
-    if (rows.length === 0) return res.status(401).json({ error: 'Invalid email or password' });
+    // Check both email and username
+    const [rows] = await db.query('SELECT * FROM users WHERE email = ? OR username = ?', [email, email]);
+    if (rows.length === 0) return res.status(401).json({ error: 'Invalid username/email or password' });
 
     const user = rows[0];
     const valid = await bcrypt.compare(password, user.password_hash);
@@ -39,7 +46,7 @@ app.post('/api/auth/login', async (req, res) => {
 
     res.json({
       token,
-      user: { id: user.id, email: user.email, role: user.role, shopId: user.shop_id },
+      user: { id: user.id, email: user.email, username: user.username, role: user.role, shopId: user.shop_id },
       shopName: shopRows[0]?.name || 'My Shop'
     });
   } catch (err) {
@@ -48,11 +55,190 @@ app.post('/api/auth/login', async (req, res) => {
   }
 });
 
+// Helper to determine RP ID and Origin dynamically based on request
+const getRpSettings = (req) => {
+  const host = req.get('host') || 'localhost';
+  const rpID = host.split(':')[0]; // remove port if present
+  const expectedOrigin = host.includes('localhost') ? `http://${host}` : `https://${host}`;
+  // For Vercel/Render cross-origin requests, the origin might be from the frontend URL
+  const origin = req.headers.origin || expectedOrigin;
+  return { rpID, origin, rpName: 'Patel Electronics' };
+};
+
+// GET /api/auth/generate-authentication-options
+app.get('/api/auth/generate-authentication-options', async (req, res) => {
+  const { email } = req.query; // email or username
+  if (!email) return res.status(400).json({ error: 'Email or username required' });
+
+  try {
+    const [userRows] = await db.query('SELECT id FROM users WHERE email = ? OR username = ?', [email, email]);
+    if (userRows.length === 0) return res.status(404).json({ error: 'User not found' });
+    const user = userRows[0];
+
+    const [passkeyRows] = await db.query('SELECT * FROM passkeys WHERE user_id = ?', [user.id]);
+    if (passkeyRows.length === 0) return res.status(400).json({ error: 'No passkeys registered for this user' });
+
+    const { rpID } = getRpSettings(req);
+    
+    const options = await generateAuthenticationOptions({
+      rpID,
+      allowCredentials: passkeyRows.map(pk => ({
+        id: pk.id,
+        type: 'public-key',
+        transports: pk.transports ? pk.transports.split(',') : ['internal'],
+      })),
+      userVerification: 'preferred',
+    });
+
+    await db.query('UPDATE users SET current_challenge = ? WHERE id = ?', [options.challenge, user.id]);
+    res.json(options);
+  } catch (err) {
+    console.error('generate auth error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/auth/verify-authentication
+app.post('/api/auth/verify-authentication', async (req, res) => {
+  const { email, response } = req.body;
+  try {
+    const [userRows] = await db.query('SELECT * FROM users WHERE email = ? OR username = ?', [email, email]);
+    if (userRows.length === 0) return res.status(404).json({ error: 'User not found' });
+    const user = userRows[0];
+
+    const [passkeyRows] = await db.query('SELECT * FROM passkeys WHERE id = ?', [response.id]);
+    if (passkeyRows.length === 0) return res.status(400).json({ error: 'Passkey not found' });
+    const passkey = passkeyRows[0];
+
+    const { rpID, origin } = getRpSettings(req);
+
+    const verification = await verifyAuthenticationResponse({
+      response,
+      expectedChallenge: user.current_challenge,
+      expectedOrigin: origin,
+      expectedRPID: rpID,
+      authenticator: {
+        credentialID: passkey.id,
+        credentialPublicKey: passkey.public_key,
+        counter: passkey.counter,
+        transports: passkey.transports ? passkey.transports.split(',') : ['internal']
+      }
+    });
+
+    if (verification.verified) {
+      await db.query('UPDATE passkeys SET counter = ? WHERE id = ?', [verification.authenticationInfo.newCounter, passkey.id]);
+      await db.query('UPDATE users SET current_challenge = NULL WHERE id = ?', [user.id]);
+
+      const token = jwt.sign(
+        { userId: user.id, shopId: user.shop_id, email: user.email, role: user.role },
+        JWT_SECRET,
+        { expiresIn: '7d' }
+      );
+      const [shopRows] = await db.query('SELECT name FROM shops WHERE id = ?', [user.shop_id]);
+
+      return res.json({
+        verified: true,
+        token,
+        user: { id: user.id, email: user.email, username: user.username, role: user.role, shopId: user.shop_id },
+        shopName: shopRows[0]?.name || 'My Shop'
+      });
+    }
+    res.status(400).json({ verified: false, error: 'Verification failed' });
+  } catch (err) {
+    console.error('verify auth error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ─── PROTECTED ROUTES — all below require JWT ─────────────────────────────────
 app.use('/api', verifyToken);
 
 // Helper: get shopId from JWT
 const getShopId = (req) => req.user.shopId;
+
+// GET /api/auth/generate-registration-options
+app.get('/api/auth/generate-registration-options', async (req, res) => {
+  const userId = req.user.userId;
+  try {
+    const [userRows] = await db.query('SELECT * FROM users WHERE id = ?', [userId]);
+    if (userRows.length === 0) return res.status(404).json({ error: 'User not found' });
+    const user = userRows[0];
+
+    const [passkeyRows] = await db.query('SELECT * FROM passkeys WHERE user_id = ?', [userId]);
+    
+    const { rpID, rpName } = getRpSettings(req);
+
+    const options = await generateRegistrationOptions({
+      rpName,
+      rpID,
+      userID: Uint8Array.from(String(user.id), c => c.charCodeAt(0)),
+      userName: user.username || user.email,
+      attestationType: 'none',
+      excludeCredentials: passkeyRows.map(pk => ({
+        id: pk.id,
+        type: 'public-key',
+        transports: pk.transports ? pk.transports.split(',') : ['internal'],
+      })),
+      authenticatorSelection: {
+        residentKey: 'preferred',
+        userVerification: 'preferred',
+        authenticatorAttachment: 'platform',
+      },
+    });
+
+    await db.query('UPDATE users SET current_challenge = ? WHERE id = ?', [options.challenge, user.id]);
+    res.json(options);
+  } catch (err) {
+    console.error('generate registration error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/auth/verify-registration
+app.post('/api/auth/verify-registration', async (req, res) => {
+  const userId = req.user.userId;
+  const { response } = req.body;
+  
+  try {
+    const [userRows] = await db.query('SELECT * FROM users WHERE id = ?', [userId]);
+    if (userRows.length === 0) return res.status(404).json({ error: 'User not found' });
+    const user = userRows[0];
+
+    const { rpID, origin } = getRpSettings(req);
+
+    const verification = await verifyRegistrationResponse({
+      response,
+      expectedChallenge: user.current_challenge,
+      expectedOrigin: origin,
+      expectedRPID: rpID,
+    });
+
+    if (verification.verified && verification.registrationInfo) {
+      const { credentialPublicKey, credentialID, counter, credentialDeviceType, credentialBackedUp } = verification.registrationInfo;
+      
+      await db.query(
+        `INSERT INTO passkeys (id, user_id, public_key, counter, device_type, backed_up, transports)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [
+          credentialID,
+          userId,
+          credentialPublicKey,
+          counter,
+          credentialDeviceType,
+          credentialBackedUp,
+          response.response.transports ? response.response.transports.join(',') : 'internal'
+        ]
+      );
+
+      await db.query('UPDATE users SET current_challenge = NULL WHERE id = ?', [userId]);
+      return res.json({ verified: true });
+    }
+    res.status(400).json({ verified: false, error: 'Registration failed' });
+  } catch (err) {
+    console.error('verify registration error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
 
 // ─── DASHBOARD STATS ─────────────────────────────────────────────────────────
 
