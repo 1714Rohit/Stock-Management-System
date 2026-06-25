@@ -65,6 +65,7 @@ async function init() {
     CREATE TABLE IF NOT EXISTS users (
       id INT AUTO_INCREMENT PRIMARY KEY,
       shop_id INT NOT NULL,
+      username VARCHAR(255) UNIQUE,
       email VARCHAR(255) NOT NULL UNIQUE,
       password_hash VARCHAR(255) NOT NULL,
       role ENUM('admin', 'staff') NOT NULL DEFAULT 'admin',
@@ -85,11 +86,11 @@ async function init() {
   // 7. Seed default admin user
   const hash = await bcrypt.hash('admin123', 10);
   await db.query(`
-    INSERT INTO users (shop_id, email, password_hash, role)
-    VALUES (1, 'admin@shop.com', ?, 'admin')
-    ON DUPLICATE KEY UPDATE password_hash = VALUES(password_hash)
+    INSERT INTO users (shop_id, username, email, password_hash, role)
+    VALUES (1, 'admin', 'admin@shop.com', ?, 'admin')
+    ON DUPLICATE KEY UPDATE username = 'admin', password_hash = VALUES(password_hash)
   `, [hash]);
-  console.log('Admin user seeded (admin@shop.com / admin123).');
+  console.log('Admin user seeded (admin / admin@shop.com / admin123).');
 
   console.log('Database initialization completed successfully!');
   process.exit(0);

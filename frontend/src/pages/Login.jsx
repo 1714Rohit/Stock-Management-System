@@ -71,18 +71,18 @@ const Login = () => {
               </div>
             )}
 
-            {/* Email */}
+            {/* Email or Username */}
             <div>
               <label className="block text-sm font-medium text-gray-400 mb-1.5">
-                Email Address
+                Email Address or Username
               </label>
               <input
-                type="email"
+                type="text"
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="Enter your email"
-                autoComplete="email"
+                placeholder="Enter email or username"
+                autoComplete="username"
                 className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-sm transition"
               />
             </div>

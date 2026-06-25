@@ -21,8 +21,8 @@ app.post('/api/auth/login', async (req, res) => {
   if (!email || !password) return res.status(400).json({ error: 'Email and password required' });
 
   try {
-    const [rows] = await db.query('SELECT * FROM users WHERE email = ?', [email]);
-    if (rows.length === 0) return res.status(401).json({ error: 'Invalid email or password' });
+    const [rows] = await db.query('SELECT * FROM users WHERE email = ? OR username = ?', [email, email]);
+    if (rows.length === 0) return res.status(401).json({ error: 'Invalid credentials' });
 
     const user = rows[0];
     const valid = await bcrypt.compare(password, user.password_hash);
