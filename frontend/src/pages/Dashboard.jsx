@@ -82,6 +82,7 @@ const Dashboard = () => {
       
       if (verData.verified) {
         showToast('Device registered successfully! You can now login with your Phone Lock.', 'success');
+        setStats(prev => ({ ...prev, hasPasskey: true }));
       }
     } catch (err) {
       console.error(err);
@@ -117,18 +118,28 @@ const Dashboard = () => {
       </div>
 
       {/* Passkey Registration Banner */}
-      <div className="bg-indigo-900/30 border border-indigo-500/30 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-4">
-        <div>
-          <h3 className="text-indigo-300 font-semibold text-sm">Enable Quick Login</h3>
-          <p className="text-gray-400 text-xs mt-1">Register this device to login with FaceID, Fingerprint, or PIN.</p>
+      {!stats?.hasPasskey && (
+        <div className="bg-indigo-900/30 border border-indigo-500/30 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div>
+            <h3 className="text-indigo-300 font-semibold text-sm">Enable Quick Login</h3>
+            <p className="text-gray-400 text-xs mt-1">Register this device to login with FaceID, Fingerprint, or PIN.</p>
+          </div>
+          <button
+            onClick={handleRegisterDevice}
+            className="bg-indigo-600 hover:bg-indigo-500 text-white font-medium py-2 px-4 rounded-xl text-sm transition-colors shadow-lg shadow-indigo-900/50 whitespace-nowrap"
+          >
+            📱 Register Device
+          </button>
         </div>
-        <button
-          onClick={handleRegisterDevice}
-          className="bg-indigo-600 hover:bg-indigo-500 text-white font-medium py-2 px-4 rounded-xl text-sm transition-colors shadow-lg shadow-indigo-900/50 whitespace-nowrap"
-        >
-          📱 Register Device
-        </button>
-      </div>
+      )}
+
+      {stats?.hasPasskey && (
+        <div className="bg-green-900/20 border border-green-500/30 rounded-xl p-3 flex items-center justify-center">
+          <span className="text-green-400 text-xs font-semibold flex items-center gap-2">
+            ✅ Phone Lock / FaceID is Active on your account
+          </span>
+        </div>
+      )}
 
       {/* Bar Chart */}
       <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5">

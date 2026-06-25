@@ -321,6 +321,11 @@ app.get('/api/stats', async (req, res) => {
        WHERE s.shop_id=? GROUP BY s.product_id ORDER BY total_sold DESC LIMIT 1`, [shopId]
     );
 
+    // Check if user has a passkey
+    const [[passkeyCount]] = await db.query(
+      `SELECT COUNT(*) AS val FROM passkeys WHERE user_id=?`, [req.user.userId]
+    );
+
     res.json({
       todaySales: todaySales.val,
       monthlySales: monthlySales.val,
@@ -337,6 +342,7 @@ app.get('/api/stats', async (req, res) => {
       topSellingProduct: topSelling[0]?.name || 'N/A',
       topSellingQty: topSelling[0]?.total_sold || 0,
       topSellingRevenue: topSelling[0]?.revenue || 0,
+      hasPasskey: passkeyCount.val > 0,
     });
   } catch (err) {
     console.error(err);
