@@ -57,11 +57,17 @@ app.post('/api/auth/login', async (req, res) => {
 
 // Helper to determine RP ID and Origin dynamically based on request
 const getRpSettings = (req) => {
-  const host = req.get('host') || 'localhost';
-  const rpID = host.split(':')[0]; // remove port if present
-  const expectedOrigin = host.includes('localhost') ? `http://${host}` : `https://${host}`;
-  // For Vercel/Render cross-origin requests, the origin might be from the frontend URL
-  const origin = req.headers.origin || expectedOrigin;
+  // For cross-origin requests, the origin is sent by the frontend (e.g., https://stock.patelradio.com)
+  const origin = req.headers.origin || (req.get('host').includes('localhost') ? `http://${req.get('host')}` : `https://${req.get('host')}`);
+  
+  let rpID = 'localhost';
+  try {
+    const originUrl = new URL(origin);
+    rpID = originUrl.hostname;
+  } catch (e) {
+    rpID = origin.split('://')[1]?.split(':')[0] || 'localhost';
+  }
+
   return { rpID, origin, rpName: 'Patel Electronics' };
 };
 
