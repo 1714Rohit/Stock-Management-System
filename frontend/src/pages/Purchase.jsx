@@ -435,7 +435,7 @@ const Purchase = () => {
                       </div>
                       <span className="text-blue-400 font-bold text-sm">{fmt(h.total_cost)}</span>
                     </div>
-                    <div className="flex flex-wrap gap-3 text-xs text-gray-400 mt-1 pl-8">
+                    <div className={`flex flex-wrap gap-3 text-xs text-gray-400 mt-1 ${isSelectionMode ? 'pl-8' : ''}`}>
                       <span>Qty: <span className="text-white font-medium">{h.quantity}</span></span>
                       <span>Unit: <span className="text-white font-medium">{fmt(h.total_cost / h.quantity)}</span></span>
                       <span>{new Date(h.purchase_date).toLocaleDateString('en-IN')}</span>
