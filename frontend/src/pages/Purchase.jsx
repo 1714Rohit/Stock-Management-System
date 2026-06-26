@@ -222,6 +222,8 @@ const Purchase = () => {
   const handlePressEnd = () => {
     if (pressTimer.current) clearTimeout(pressTimer.current);
   };
+
+  const mutation = useMutation({
     mutationFn: async (payload) => {
       const res = await api.recordPurchase(payload);
       const data = await res.json();
