@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { api } from '../api/client';
 import StatCard from '../components/StatCard';
 import { useToast } from '../components/Toast';
@@ -44,37 +44,35 @@ const CustomTooltip = ({ active, payload }) => {
 };
 
 const Dashboard = () => {
-  const [stats, setStats] = useState(null);
-  const [chartData, setChartData] = useState([]);
-  const [loading, setLoading] = useState(true);
   const { showToast, ToastComponent } = useToast();
 
-  const load = async () => {
-    setLoading(true);
-    try {
+  const { data, isLoading: loading, isError } = useQuery({
+    queryKey: ['dashboardData'],
+    queryFn: async () => {
       const [statsRes, chartRes] = await Promise.all([
         api.getStats(),
         api.getTopSelling(),
       ]);
       const statsData = await statsRes.json();
       const chartRaw = await chartRes.json();
-      setStats(statsData);
-      setChartData(chartRaw.filter(p => p.total_sold > 0));
-    } catch {
-      showToast('Failed to load dashboard data', 'error');
-    } finally {
-      setLoading(false);
+      return {
+        stats: statsData,
+        chartData: chartRaw.filter(p => p.total_sold > 0)
+      };
     }
-  };
+  });
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps, react-hooks/set-state-in-effect
-  useEffect(() => { load(); }, []);
+  if (isError) {
+    showToast('Failed to load dashboard data', 'error');
+  }
 
   if (loading) return (
     <div className="flex items-center justify-center h-64">
       <div className="text-gray-400 animate-pulse text-sm">Loading dashboard...</div>
     </div>
   );
+
+  const { stats, chartData } = data || { stats: null, chartData: [] };
 
   const profitColor = (val) => parseFloat(val) >= 0 ? 'green' : 'red';
 

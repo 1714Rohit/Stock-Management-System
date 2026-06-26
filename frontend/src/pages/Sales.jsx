@@ -1,4 +1,5 @@
-import { useEffect, useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api/client';
 import { useToast } from '../components/Toast';
 import StatCard from '../components/StatCard';
@@ -95,38 +96,32 @@ const CustomTooltip = ({ active, payload }) => {
 };
 
 const Sales = () => {
-  const [products, setProducts] = useState([]);
-  const [history, setHistory] = useState([]);
-  const [stats, setStats] = useState(null);
-  const [topSelling, setTopSelling] = useState([]);
+  const queryClient = useQueryClient();
   const [tab, setTab] = useState('today');
   const [modalOpen, setModalOpen] = useState(false);
   const [form, setForm] = useState({ product_id: '', quantity: '1' });
   const [selectedProduct, setSelectedProduct] = useState(null);
-  const [saving, setSaving] = useState(false);
-  const [loading, setLoading] = useState(true);
   const { showToast, ToastComponent } = useToast();
 
-  const load = async () => {
-    setLoading(true);
-    try {
+  const { data, isLoading: loading } = useQuery({
+    queryKey: ['salesData'],
+    queryFn: async () => {
       const [pRes, hRes, sRes, tRes] = await Promise.all([
         api.getProducts(),
         api.getSaleHistory(30),
         api.getStats(),
         api.getTopSelling(),
       ]);
-      setProducts(await pRes.json());
-      setHistory(await hRes.json());
-      setStats(await sRes.json());
-      const top = await tRes.json();
-      setTopSelling(top.filter(p => p.total_sold > 0));
-    } catch { showToast('Failed to load data', 'error'); }
-    finally { setLoading(false); }
-  };
+      return {
+        products: await pRes.json(),
+        history: await hRes.json(),
+        stats: await sRes.json(),
+        topSelling: (await tRes.json()).filter(p => p.total_sold > 0)
+      };
+    }
+  });
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps, react-hooks/set-state-in-effect
-  useEffect(() => { load(); }, []);
+  const { products = [], history = [], stats = null, topSelling = [] } = data || {};
 
   const handleProductSelect = (p) => {
     setSelectedProduct(p);
@@ -138,22 +133,32 @@ const Sales = () => {
     setForm(f => ({ ...f, product_id: '' }));
   };
 
-  const handleSaleSubmit = async (e) => {
-    e.preventDefault();
-    if (!selectedProduct) return;
-    setSaving(true);
-    try {
-      const res = await api.recordSale({ product_id: parseInt(form.product_id), quantity: parseInt(form.quantity) });
+  const mutation = useMutation({
+    mutationFn: async (payload) => {
+      const res = await api.recordSale(payload);
       const data = await res.json();
-      if (!res.ok) return showToast(data.error || 'Failed to record sale', 'error');
+      if (!res.ok) throw new Error(data.error || 'Failed to record sale');
+      return data;
+    },
+    onSuccess: () => {
       showToast(`Sale of ${form.quantity} × ${selectedProduct.name} recorded!`);
       setModalOpen(false);
       setForm({ product_id: '', quantity: '1' });
       setSelectedProduct(null);
-      load();
-    } catch { showToast('Error recording sale', 'error'); }
-    finally { setSaving(false); }
+      queryClient.invalidateQueries(['salesData']);
+      queryClient.invalidateQueries(['dashboardData']);
+      queryClient.invalidateQueries(['products']);
+    },
+    onError: (err) => showToast(err.message || 'Error recording sale', 'error')
+  });
+
+  const handleSaleSubmit = (e) => {
+    e.preventDefault();
+    if (!selectedProduct) return;
+    mutation.mutate({ product_id: parseInt(form.product_id), quantity: parseInt(form.quantity) });
   };
+
+  const saving = mutation.isPending;
 
   const COLORS = ['#6366f1','#8b5cf6','#a78bfa','#818cf8','#4f46e5'];
 

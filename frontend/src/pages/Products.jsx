@@ -1,4 +1,5 @@
-import { useEffect, useState, useRef } from 'react';
+import { useState, useRef } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api/client';
 import { useToast } from '../components/Toast';
 
@@ -50,29 +51,23 @@ const SearchWithSuggestions = ({ value, onChange, onClear, onSelect, placeholder
 };
 
 const Products = () => {
-  const [products, setProducts] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
   const [editProduct, setEditProduct] = useState(null);
   const [form, setForm] = useState(initialForm);
-  const [saving, setSaving] = useState(false);
   const [sellModalOpen, setSellModalOpen] = useState(false);
   const [sellProduct, setSellProduct] = useState(null);
   const [sellQuantity, setSellQuantity] = useState(1);
   const { showToast, ToastComponent } = useToast();
 
-  const load = async () => {
-    setLoading(true);
-    try {
+  const { data: products = [], isLoading: loading } = useQuery({
+    queryKey: ['products'],
+    queryFn: async () => {
       const res = await api.getProducts();
-      setProducts(await res.json());
-    } catch { showToast('Failed to load products', 'error'); }
-    finally { setLoading(false); }
-  };
-
-  // eslint-disable-next-line react-hooks/exhaustive-deps, react-hooks/set-state-in-effect
-  useEffect(() => { load(); }, []);
+      return res.json();
+    }
+  });
 
   const openAdd = () => { setEditProduct(null); setForm(initialForm); setModalOpen(true); };
   const openEdit = (p) => {
@@ -81,36 +76,51 @@ const Products = () => {
     setModalOpen(true);
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setSaving(true);
-    try {
-      const payload = {
-        name: form.name,
-        price: parseFloat(form.price),
-        purchase_price: parseFloat(form.purchase_price) || 0,
-        stock: editProduct ? undefined : parseInt(form.stock),
-        low_stock_threshold: parseInt(form.low_stock_threshold),
-      };
+  const mutation = useMutation({
+    mutationFn: async (payload) => {
       const res = editProduct
         ? await api.updateProduct(editProduct.id, payload)
         : await api.addProduct(payload);
       const data = await res.json();
-      if (!res.ok) return showToast(data.error || 'Failed to save', 'error');
+      if (!res.ok) throw new Error(data.error || 'Failed to save');
+      return data;
+    },
+    onSuccess: () => {
       showToast(editProduct ? 'Product updated!' : 'Product added!');
       setModalOpen(false);
-      load();
-    } catch { showToast('Error saving product', 'error'); }
-    finally { setSaving(false); }
+      queryClient.invalidateQueries(['products']);
+      queryClient.invalidateQueries(['dashboardData']);
+    },
+    onError: (err) => showToast(err.message || 'Error saving product', 'error')
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id) => {
+      const res = await api.deleteProduct(id);
+      if (!res.ok) throw new Error('Failed to delete');
+    },
+    onSuccess: () => {
+      showToast('Product deleted');
+      queryClient.invalidateQueries(['products']);
+      queryClient.invalidateQueries(['dashboardData']);
+    },
+    onError: () => showToast('Error deleting', 'error')
+  });
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    mutation.mutate({
+      name: form.name,
+      price: parseFloat(form.price),
+      purchase_price: parseFloat(form.purchase_price) || 0,
+      stock: editProduct ? undefined : parseInt(form.stock),
+      low_stock_threshold: parseInt(form.low_stock_threshold),
+    });
   };
 
-  const handleDelete = async (id, name) => {
+  const handleDelete = (id, name) => {
     if (!confirm(`Delete "${name}"? All transactions will be lost.`)) return;
-    try {
-      const res = await api.deleteProduct(id);
-      if (res.ok) { showToast('Product deleted'); load(); }
-      else showToast('Failed to delete', 'error');
-    } catch { showToast('Error deleting', 'error'); }
+    deleteMutation.mutate(id);
   };
 
   const openSell = (p) => {
@@ -119,23 +129,32 @@ const Products = () => {
     setSellModalOpen(true);
   };
 
-  const handleSellSubmit = async (e) => {
-    e.preventDefault();
-    if (!sellProduct) return;
-    setSaving(true);
-    try {
-      const res = await api.recordSale({
-        product_id: sellProduct.id,
-        quantity: parseInt(sellQuantity),
-      });
+  const sellMutation = useMutation({
+    mutationFn: async (payload) => {
+      const res = await api.recordSale(payload);
       const data = await res.json();
-      if (!res.ok) return showToast(data.error || 'Failed to record sale', 'error');
+      if (!res.ok) throw new Error(data.error || 'Failed to record sale');
+      return data;
+    },
+    onSuccess: () => {
       showToast(`Sale of ${sellQuantity} × ${sellProduct.name} recorded!`);
       setSellModalOpen(false);
-      load();
-    } catch { showToast('Error recording sale', 'error'); }
-    finally { setSaving(false); }
+      queryClient.invalidateQueries(['products']);
+      queryClient.invalidateQueries(['dashboardData']);
+    },
+    onError: (err) => showToast(err.message || 'Error recording sale', 'error')
+  });
+
+  const handleSellSubmit = (e) => {
+    e.preventDefault();
+    if (!sellProduct) return;
+    sellMutation.mutate({
+      product_id: sellProduct.id,
+      quantity: parseInt(sellQuantity),
+    });
   };
+
+  const saving = mutation.isPending || sellMutation.isPending;
 
   const filtered = products.filter(p => p.name.toLowerCase().includes(search.toLowerCase()));
 

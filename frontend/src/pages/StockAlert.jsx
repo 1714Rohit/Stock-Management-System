@@ -1,25 +1,19 @@
-import { useEffect, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { api } from '../api/client';
 import { useToast } from '../components/Toast';
 
 const fmt = (n) => `₹${parseFloat(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
 
 const StockAlert = () => {
-  const [alerts, setAlerts] = useState([]);
-  const [loading, setLoading] = useState(true);
   const { showToast, ToastComponent } = useToast();
 
-  const load = async () => {
-    setLoading(true);
-    try {
+  const { data: alerts = [], isLoading: loading, refetch } = useQuery({
+    queryKey: ['stockAlerts'],
+    queryFn: async () => {
       const res = await api.getStockAlerts();
-      setAlerts(await res.json());
-    } catch { showToast('Failed to load alerts', 'error'); }
-    finally { setLoading(false); }
-  };
-
-  // eslint-disable-next-line react-hooks/exhaustive-deps, react-hooks/set-state-in-effect
-  useEffect(() => { load(); }, []);
+      return res.json();
+    }
+  });
 
   const urgencyColor = (pct) => {
     if (pct === 0) return { bar: 'bg-red-600', text: 'text-red-400', badge: 'bg-red-900/50 text-red-300 border-red-800/50', label: 'OUT' };
@@ -39,7 +33,7 @@ const StockAlert = () => {
             <h2 className="text-lg font-bold text-white">Stock Alerts</h2>
             <p className="text-xs text-gray-500">Products that need to be restocked</p>
           </div>
-          <button onClick={load} className="text-xs bg-gray-800 hover:bg-gray-700 text-gray-300 px-3 py-2 rounded-xl transition-colors flex items-center gap-1.5">
+          <button onClick={() => refetch()} className="text-xs bg-gray-800 hover:bg-gray-700 text-gray-300 px-3 py-2 rounded-xl transition-colors flex items-center gap-1.5">
             🔄 Refresh
           </button>
         </div>

@@ -1,4 +1,5 @@
-import { useEffect, useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api/client';
 import { useToast } from '../components/Toast';
 
@@ -134,13 +135,10 @@ const ProductSearchPicker = ({ products, selectedProduct, onSelect, onClear }) =
 
 /* ── Main Purchase page ─────────────────────────────────────────── */
 const Purchase = () => {
-  const [products, setProducts] = useState([]);
-  const [history, setHistory] = useState([]);
+  const queryClient = useQueryClient();
   const [modalOpen, setModalOpen] = useState(false);
   const [form, setForm] = useState({ product_id: '', quantity: '10', unit_cost: '' });
   const [selectedProduct, setSelectedProduct] = useState(null);
-  const [saving, setSaving] = useState(false);
-  const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [showDateFilter, setShowDateFilter] = useState(false);
 
@@ -151,18 +149,18 @@ const Purchase = () => {
 
   const { showToast, ToastComponent } = useToast();
 
-  const load = async () => {
-    setLoading(true);
-    try {
+  const { data, isLoading: loading } = useQuery({
+    queryKey: ['purchasesData'],
+    queryFn: async () => {
       const [pRes, hRes] = await Promise.all([api.getProducts(), api.getPurchaseHistory(365)]);
-      setProducts(await pRes.json());
-      setHistory(await hRes.json());
-    } catch { showToast('Failed to load data', 'error'); }
-    finally { setLoading(false); }
-  };
+      return {
+        products: await pRes.json(),
+        history: await hRes.json(),
+      };
+    }
+  });
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps, react-hooks/set-state-in-effect
-  useEffect(() => { load(); }, []);
+  const { products = [], history = [] } = data || {};
 
   const handleProductSelect = (p) => {
     setSelectedProduct(p);
@@ -178,26 +176,37 @@ const Purchase = () => {
     setForm(f => ({ ...f, product_id: '', unit_cost: '' }));
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!selectedProduct) return showToast('Please select a product', 'error');
-    setSaving(true);
-    try {
-      const res = await api.recordPurchase({
-        product_id: selectedProduct.id,
-        quantity: parseInt(form.quantity),
-        unit_cost: parseFloat(form.unit_cost),
-      });
+  const mutation = useMutation({
+    mutationFn: async (payload) => {
+      const res = await api.recordPurchase(payload);
       const data = await res.json();
-      if (!res.ok) return showToast(data.error || 'Failed to record purchase', 'error');
+      if (!res.ok) throw new Error(data.error || 'Failed to record purchase');
+      return data;
+    },
+    onSuccess: () => {
       showToast(`Purchase of ${form.quantity} × ${selectedProduct.name} recorded!`);
       setModalOpen(false);
       setForm({ product_id: '', quantity: '10', unit_cost: '' });
       setSelectedProduct(null);
-      load();
-    } catch { showToast('Error recording purchase', 'error'); }
-    finally { setSaving(false); }
+      queryClient.invalidateQueries(['purchasesData']);
+      queryClient.invalidateQueries(['products']);
+      queryClient.invalidateQueries(['salesData']);
+      queryClient.invalidateQueries(['dashboardData']);
+    },
+    onError: (err) => showToast(err.message || 'Error recording purchase', 'error')
+  });
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (!selectedProduct) return showToast('Please select a product', 'error');
+    mutation.mutate({
+      product_id: selectedProduct.id,
+      quantity: parseInt(form.quantity),
+      unit_cost: parseFloat(form.unit_cost),
+    });
   };
+
+  const saving = mutation.isPending;
 
   // Filter by search + date range
   const filteredHistory = history.filter(h => {
