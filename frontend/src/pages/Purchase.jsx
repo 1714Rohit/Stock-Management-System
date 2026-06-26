@@ -142,6 +142,11 @@ const Purchase = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [showDateFilter, setShowDateFilter] = useState(false);
 
+  // Selection mode state
+  const [isSelectionMode, setIsSelectionMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState([]);
+  const pressTimer = useRef(null);
+
   const today = new Date();
   const firstOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
   const [fromDate, setFromDate] = useState(toInputDate(firstOfMonth));
@@ -176,7 +181,47 @@ const Purchase = () => {
     setForm(f => ({ ...f, product_id: '', unit_cost: '' }));
   };
 
-  const mutation = useMutation({
+  const deleteMutation = useMutation({
+    mutationFn: async (ids) => {
+      const res = await api.deletePurchases(ids);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to delete purchases');
+      return data;
+    },
+    onSuccess: () => {
+      showToast(`${selectedIds.length} purchase(s) deleted and stock updated!`);
+      setIsSelectionMode(false);
+      setSelectedIds([]);
+      queryClient.invalidateQueries(['purchasesData']);
+      queryClient.invalidateQueries(['products']);
+      queryClient.invalidateQueries(['dashboardData']);
+    },
+    onError: (err) => showToast(err.message || 'Error deleting purchases', 'error')
+  });
+
+  const handleDeleteSelected = () => {
+    if (selectedIds.length === 0) return;
+    if (!confirm(`Are you sure you want to delete ${selectedIds.length} purchase entry(s)? This will also decrease the stock accordingly.`)) return;
+    deleteMutation.mutate(selectedIds);
+  };
+
+  const toggleSelection = (id) => {
+    setSelectedIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
+  };
+
+  const handlePressStart = (id) => {
+    pressTimer.current = setTimeout(() => {
+      if (!isSelectionMode) {
+        if (navigator.vibrate) navigator.vibrate(50); // Haptic feedback if supported
+        setIsSelectionMode(true);
+        setSelectedIds([id]);
+      }
+    }, 800); // 800ms long press
+  };
+
+  const handlePressEnd = () => {
+    if (pressTimer.current) clearTimeout(pressTimer.current);
+  };
     mutationFn: async (payload) => {
       const res = await api.recordPurchase(payload);
       const data = await res.json();
@@ -238,14 +283,32 @@ const Purchase = () => {
             <h2 className="text-lg font-bold text-white">Purchase / Restock</h2>
             <p className="text-xs text-gray-500">Log stock arrivals and update inventory</p>
           </div>
-          <button
-            onClick={() => setModalOpen(true)}
-            className="flex-shrink-0 bg-blue-600 hover:bg-blue-500 text-white text-sm font-semibold px-4 py-2 rounded-xl transition-colors shadow-lg shadow-blue-900/40 flex items-center gap-1.5"
-          >
-            <span className="text-base leading-none">+</span>
-            <span className="hidden sm:inline">Log Purchase</span>
-            <span className="sm:hidden">Add</span>
-          </button>
+          {isSelectionMode ? (
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => { setIsSelectionMode(false); setSelectedIds([]); }}
+                className="bg-gray-800 hover:bg-gray-700 text-white text-sm font-semibold px-4 py-2 rounded-xl transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteSelected}
+                disabled={selectedIds.length === 0 || deleteMutation.isPending}
+                className="bg-red-600 hover:bg-red-500 disabled:opacity-50 text-white text-sm font-semibold px-4 py-2 rounded-xl transition-colors shadow-lg shadow-red-900/40"
+              >
+                {deleteMutation.isPending ? 'Deleting...' : `Delete (${selectedIds.length})`}
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => setModalOpen(true)}
+              className="flex-shrink-0 bg-blue-600 hover:bg-blue-500 text-white text-sm font-semibold px-4 py-2 rounded-xl transition-colors shadow-lg shadow-blue-900/40 flex items-center gap-1.5"
+            >
+              <span className="text-base leading-none">+</span>
+              <span className="hidden sm:inline">Log Purchase</span>
+              <span className="sm:hidden">Add</span>
+            </button>
+          )}
         </div>
 
         {/* Row 2: Search bar (full width on mobile) */}
@@ -343,28 +406,50 @@ const Purchase = () => {
         ) : (
           <>
             {/* Mobile cards */}
-            <div className="md:hidden overflow-y-auto space-y-3">
-              {filteredHistory.map(h => (
-                <div key={h.id} className="bg-gray-900 border border-gray-800 rounded-2xl p-3">
-                  <div className="flex justify-between items-start mb-1">
-                    <p className="font-semibold text-white text-sm">{h.product_name}</p>
-                    <span className="text-blue-400 font-bold text-sm">{fmt(h.total_cost)}</span>
+            <div className="md:hidden overflow-y-auto space-y-3 relative select-none">
+              {filteredHistory.map(h => {
+                const isSelected = selectedIds.includes(h.id);
+                return (
+                  <div
+                    key={h.id}
+                    onMouseDown={() => handlePressStart(h.id)}
+                    onMouseUp={handlePressEnd}
+                    onMouseLeave={handlePressEnd}
+                    onTouchStart={() => handlePressStart(h.id)}
+                    onTouchEnd={handlePressEnd}
+                    onClick={() => { if (isSelectionMode) toggleSelection(h.id); }}
+                    className={`bg-gray-900 border rounded-2xl p-3 transition-colors ${
+                      isSelectionMode ? 'cursor-pointer' : ''
+                    } ${isSelected ? 'border-red-500 bg-red-950/20' : 'border-gray-800'}`}
+                  >
+                    <div className="flex justify-between items-start mb-1">
+                      <div className="flex items-center gap-3">
+                        {isSelectionMode && (
+                          <div className={`w-5 h-5 rounded border flex items-center justify-center ${isSelected ? 'bg-red-500 border-red-500' : 'border-gray-600'}`}>
+                            {isSelected && <span className="text-white text-xs">✓</span>}
+                          </div>
+                        )}
+                        <p className="font-semibold text-white text-sm">{h.product_name}</p>
+                      </div>
+                      <span className="text-blue-400 font-bold text-sm">{fmt(h.total_cost)}</span>
+                    </div>
+                    <div className="flex flex-wrap gap-3 text-xs text-gray-400 mt-1 pl-8">
+                      <span>Qty: <span className="text-white font-medium">{h.quantity}</span></span>
+                      <span>Unit: <span className="text-white font-medium">{fmt(h.total_cost / h.quantity)}</span></span>
+                      <span>{new Date(h.purchase_date).toLocaleDateString('en-IN')}</span>
+                    </div>
                   </div>
-                  <div className="flex flex-wrap gap-3 text-xs text-gray-400 mt-1">
-                    <span>Qty: <span className="text-white font-medium">{h.quantity}</span></span>
-                    <span>Unit: <span className="text-white font-medium">{fmt(h.total_cost / h.quantity)}</span></span>
-                    <span>{new Date(h.purchase_date).toLocaleDateString('en-IN')}</span>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
 
             {/* Desktop table — sticky header */}
-            <div className="hidden md:flex flex-col flex-1 bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden min-h-0">
+            <div className="hidden md:flex flex-col flex-1 bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden min-h-0 select-none">
               <div className="overflow-y-auto flex-1">
                 <table className="w-full text-sm">
                   <thead className="sticky top-0 z-10 border-b border-gray-800 shadow-sm">
                     <tr className="text-left text-xs text-gray-500 uppercase tracking-wider">
+                      {isSelectionMode && <th className="px-5 py-4 bg-gray-900 w-12"></th>}
                       <th className="px-5 py-4 font-semibold bg-gray-900">No.</th>
                       <th className="px-5 py-4 font-semibold bg-gray-900">Product</th>
                       <th className="px-5 py-4 font-semibold text-center bg-gray-900">Qty</th>
@@ -374,16 +459,33 @@ const Purchase = () => {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-800/60">
-                    {filteredHistory.map((h, idx) => (
-                      <tr key={h.id} className="hover:bg-gray-800/30 transition-colors">
-                        <td className="px-5 py-3 text-gray-600 text-sm">{idx + 1}</td>
-                        <td className="px-5 py-3 font-medium text-white">{h.product_name}</td>
-                        <td className="px-5 py-3 text-center text-indigo-300 font-semibold">{h.quantity}</td>
-                        <td className="px-5 py-3 text-right text-gray-400">{fmt(h.total_cost / h.quantity)}</td>
-                        <td className="px-5 py-3 text-right text-blue-400 font-semibold">{fmt(h.total_cost)}</td>
-                        <td className="px-5 py-3 text-right text-gray-500 text-sm">{new Date(h.purchase_date).toLocaleString('en-IN')}</td>
-                      </tr>
-                    ))}
+                    {filteredHistory.map((h, idx) => {
+                      const isSelected = selectedIds.includes(h.id);
+                      return (
+                        <tr 
+                          key={h.id} 
+                          onMouseDown={() => handlePressStart(h.id)}
+                          onMouseUp={handlePressEnd}
+                          onMouseLeave={handlePressEnd}
+                          onClick={() => { if (isSelectionMode) toggleSelection(h.id); }}
+                          className={`transition-colors ${isSelectionMode ? 'cursor-pointer' : ''} ${isSelected ? 'bg-red-950/20' : 'hover:bg-gray-800/30'}`}
+                        >
+                          {isSelectionMode && (
+                            <td className="px-5 py-3">
+                              <div className={`w-5 h-5 rounded border flex items-center justify-center ${isSelected ? 'bg-red-500 border-red-500' : 'border-gray-600'}`}>
+                                {isSelected && <span className="text-white text-xs">✓</span>}
+                              </div>
+                            </td>
+                          )}
+                          <td className="px-5 py-3 text-gray-600 text-sm">{idx + 1}</td>
+                          <td className="px-5 py-3 font-medium text-white">{h.product_name}</td>
+                          <td className="px-5 py-3 text-center text-indigo-300 font-semibold">{h.quantity}</td>
+                          <td className="px-5 py-3 text-right text-gray-400">{fmt(h.total_cost / h.quantity)}</td>
+                          <td className="px-5 py-3 text-right text-blue-400 font-semibold">{fmt(h.total_cost)}</td>
+                          <td className="px-5 py-3 text-right text-gray-500 text-sm">{new Date(h.purchase_date).toLocaleString('en-IN')}</td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>

@@ -338,7 +338,54 @@ app.post('/api/sales', async (req, res) => {
   }
 });
 
-// ─── PURCHASES ────────────────────────────────────────────────────────────────
+// DELETE /api/purchases
+app.delete('/api/purchases', async (req, res) => {
+  const shopId = getShopId(req);
+  const { ids } = req.body;
+
+  if (!ids || !Array.isArray(ids) || ids.length === 0) {
+    return res.status(400).json({ error: 'No purchase IDs provided' });
+  }
+
+  try {
+    // We need to fetch the purchase records first to know how much stock to decrement
+    const placeholders = ids.map(() => '?').join(',');
+    const [purchases] = await db.query(
+      `SELECT id, product_id, quantity FROM purchases WHERE shop_id=? AND id IN (${placeholders})`,
+      [shopId, ...ids]
+    );
+
+    if (purchases.length === 0) {
+      return res.status(404).json({ error: 'Purchases not found' });
+    }
+
+    // Begin transaction for safety since we are deleting records and updating stock
+    await db.query('START TRANSACTION');
+
+    for (const p of purchases) {
+      // Decrement stock for the product. Prevent stock from going negative if possible, 
+      // but if the user over-deleted, it might go negative depending on the schema (it's INT).
+      await db.query(
+        `UPDATE products SET stock = GREATEST(0, stock - ?) WHERE id = ? AND shop_id = ?`,
+        [p.quantity, p.product_id, shopId]
+      );
+    }
+
+    // Delete the purchases
+    await db.query(
+      `DELETE FROM purchases WHERE shop_id=? AND id IN (${placeholders})`,
+      [shopId, ...ids]
+    );
+
+    await db.query('COMMIT');
+    res.json({ message: 'Purchases deleted successfully and stock updated' });
+
+  } catch (err) {
+    await db.query('ROLLBACK');
+    console.error(err);
+    res.status(500).json({ error: 'Failed to delete purchases' });
+  }
+});
 
 // POST /api/purchases
 app.post('/api/purchases', async (req, res) => {

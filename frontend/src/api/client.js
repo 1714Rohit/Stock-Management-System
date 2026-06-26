@@ -44,8 +44,15 @@ export const api = {
   recordSale: (data) => request('/sales', { method: 'POST', body: JSON.stringify(data) }),
 
   // Purchases
-  getPurchaseHistory: (limit = 50) => request(`/purchases/history?limit=${limit}`),
-  recordPurchase: (data) => request('/purchases', { method: 'POST', body: JSON.stringify(data) }),
+  getPurchaseHistory: (limit = 30) => request(`/purchases/history?limit=${limit}`),
+  recordPurchase: (payload) => request('/purchases', {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  }),
+  deletePurchases: (ids) => request('/purchases', {
+    method: 'DELETE',
+    body: JSON.stringify({ ids })
+  }),
 
   // Products
   getProducts: () => request('/products'),
