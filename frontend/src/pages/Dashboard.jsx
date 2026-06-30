@@ -101,7 +101,7 @@ const Dashboard = () => {
           </div>
         ) : (
           <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={chartData} margin={{ top: 24, right: 10, left: 10, bottom: 20 }}>
+            <BarChart data={chartData} margin={{ top: 24, right: 10, left: 10, bottom: -20 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" vertical={false} />
               <XAxis
                 dataKey="name"

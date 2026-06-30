@@ -316,7 +316,7 @@ const Sales = () => {
           <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5">
             <h3 className="text-sm font-semibold text-white mb-4">Best Selling Products</h3>
             <ResponsiveContainer width="100%" height={220}>
-              <BarChart data={topSelling.slice(0, 6)} margin={{ top: 24, right: 10, left: 10, bottom: 20 }}>
+              <BarChart data={topSelling.slice(0, 6)} margin={{ top: 24, right: 10, left: 10, bottom: -20 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" vertical={false} />
                 <XAxis
                   dataKey="name"
