@@ -4,6 +4,8 @@ import StatCard from '../components/StatCard';
 import { useToast } from '../components/Toast';
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, CartesianGrid, LabelList,
+} from 'recharts';
+
 /* XAxis tick — horizontal name below bar, hidden on mobile */
 const CustomXAxisTick = ({ x, y, payload }) => {
   const name = payload.value || '';
