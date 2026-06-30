@@ -6,20 +6,21 @@ import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, CartesianGrid, LabelList,
 } from 'recharts';
 
-// Number shown above the bar, name shown inside the bar (bottom-aligned)
+// Number shown above the bar, name shown VERTICALLY inside the bar
 const InsideNameLabel = (props) => {
   const { x, y, width, height, value } = props;
-  if (!value || height < 25 || width < 20) return null;
-  const maxChars = Math.max(1, Math.floor(width / 6.5));
+  if (!value || height < 30 || width < 14) return null;
+  const maxChars = Math.max(1, Math.floor(height / 7));
   const display = value.length > maxChars ? value.substring(0, maxChars) + '…' : value;
   return (
     <text
       x={x + width / 2}
-      y={y + height - 10}
-      textAnchor="middle"
-      fill="rgba(255,255,255,0.8)"
+      y={y + height - 6}
+      textAnchor="end"
+      fill="rgba(255,255,255,0.85)"
       fontSize={10}
       fontWeight={600}
+      transform={`rotate(-90, ${x + width / 2}, ${y + height - 6})`}
     >
       {display}
     </text>

@@ -69,21 +69,21 @@ const ProductSearchPicker = ({ products, selectedProduct, onSelect, onClear }) =
   );
 };
 
-/* Product name rendered INSIDE the bar — horizontal, centered, truncated */
+/* Product name rendered INSIDE the bar — vertical (rotated 90°), centered */
 const InsideNameLabel = (props) => {
   const { x, y, width, height, value } = props;
-  if (!value || height < 25 || width < 20) return null;
-  // Estimate how many chars fit given bar width (approx 6px per char at font-size 10)
-  const maxChars = Math.max(1, Math.floor(width / 6.5));
+  if (!value || height < 30 || width < 14) return null;
+  const maxChars = Math.max(1, Math.floor(height / 7));
   const display = value.length > maxChars ? value.substring(0, maxChars) + '…' : value;
   return (
     <text
       x={x + width / 2}
-      y={y + height - 10}
-      textAnchor="middle"
-      fill="rgba(255,255,255,0.8)"
+      y={y + height - 6}
+      textAnchor="end"
+      fill="rgba(255,255,255,0.85)"
       fontSize={10}
       fontWeight={600}
+      transform={`rotate(-90, ${x + width / 2}, ${y + height - 6})`}
     >
       {display}
     </text>
@@ -108,8 +108,8 @@ const DATE_PRESETS = [
   { label: 'All', days: 'all' },
   { label: 'Today', days: 'today' },
   { label: 'Yesterday', days: 'yesterday' },
-  { label: '7 Days', days: 7 },
-  { label: '30 Days', days: 30 },
+  { label: '7D', days: 7 },
+  { label: '30D', days: 30 },
 ];
 
 const Sales = () => {
@@ -120,6 +120,23 @@ const Sales = () => {
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [returnModal, setReturnModal] = useState(null);
   const [returnQty, setReturnQty] = useState('1');
+  const pressTimer = useRef(null);
+
+  const openReturnModal = (s) => {
+    setReturnModal({ sale_id: s.id, product_name: s.product_name, max_qty: s.quantity });
+    setReturnQty('1');
+  };
+
+  const handlePressStart = (s) => {
+    pressTimer.current = setTimeout(() => {
+      if (navigator.vibrate) navigator.vibrate(50);
+      openReturnModal(s);
+    }, 600);
+  };
+
+  const handlePressEnd = () => {
+    if (pressTimer.current) clearTimeout(pressTimer.current);
+  };
 
   // Sales history filters
   const [searchQuery, setSearchQuery] = useState('');
@@ -365,10 +382,17 @@ const Sales = () => {
             </p>
           ) : (
             <>
-              {/* Mobile — card list */}
+              {/* Mobile — card list: tap to open return modal, or long-press */}
               <div className="md:hidden divide-y divide-gray-800/60 max-h-[480px] overflow-y-auto">
                 {filteredHistory.map((s, idx) => (
-                  <div key={s.id} className="px-4 py-3 flex items-center gap-3">
+                  <div
+                    key={s.id}
+                    className="px-4 py-3 flex items-center gap-3 active:bg-gray-800/50 transition-colors cursor-pointer"
+                    onClick={() => openReturnModal(s)}
+                    onTouchStart={() => handlePressStart(s)}
+                    onTouchEnd={handlePressEnd}
+                    onTouchMove={handlePressEnd}
+                  >
                     <span className="text-gray-600 text-xs w-5 flex-shrink-0">{idx + 1}</span>
                     <div className="flex-1 min-w-0">
                       <p className="font-semibold text-white text-sm truncate">{s.product_name}</p>
@@ -378,13 +402,7 @@ const Sales = () => {
                       <p className="text-emerald-400 font-bold text-sm">{fmt(s.total_price)}</p>
                       <p className="text-xs text-indigo-300">{s.quantity} unit{s.quantity > 1 ? 's' : ''}</p>
                     </div>
-                    <button
-                      onClick={() => { setReturnModal({ sale_id: s.id, product_name: s.product_name, max_qty: s.quantity }); setReturnQty('1'); }}
-                      title="Process Return"
-                      className="flex-shrink-0 text-amber-400 hover:text-amber-300 hover:bg-amber-900/20 p-1.5 rounded-lg transition-all text-lg"
-                    >
-                      ↩
-                    </button>
+                    <span className="flex-shrink-0 text-amber-500 text-base">↩</span>
                   </div>
                 ))}
               </div>
