@@ -6,26 +6,27 @@ import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, CartesianGrid, LabelList,
 } from 'recharts';
 
-// Bar label rendered inside the bar (white, centered)
-const InsideBarLabel = (props) => {
+// Number shown above the bar, name shown inside the bar (bottom-aligned)
+const InsideNameLabel = (props) => {
   const { x, y, width, height, value } = props;
-  if (!value || height < 20) return null;
+  if (!value || height < 30) return null;
+  const maxChars = Math.max(2, Math.floor(height / 9));
+  const display = value.length > maxChars ? value.substring(0, maxChars) + '…' : value;
   return (
     <text
       x={x + width / 2}
-      y={y + height / 2}
+      y={y + height - 8}
       textAnchor="middle"
-      dominantBaseline="middle"
-      fill="#fff"
-      fontSize={11}
-      fontWeight={700}
+      fill="rgba(255,255,255,0.75)"
+      fontSize={10}
+      fontWeight={600}
     >
-      {value}
+      {display}
     </text>
   );
 };
 
-// X-Axis label: truncated + rotated -35deg so names never overlap
+// X-Axis label: truncated + rotated so names never overlap
 const CustomXAxisTick = ({ x, y, payload }) => {
   const name = payload.value || '';
   const maxChars = 8;
@@ -138,7 +139,10 @@ const Dashboard = () => {
                 {chartData.map((_, i) => (
                   <Cell key={i} fill={COLORS[i % COLORS.length]} />
                 ))}
-                <LabelList content={<InsideBarLabel />} />
+                {/* Number above the bar */}
+                <LabelList dataKey="total_sold" position="top" style={{ fill: '#e5e7eb', fontSize: 12, fontWeight: 700 }} />
+                {/* Product name inside the bar */}
+                <LabelList dataKey="name" content={<InsideNameLabel />} />
               </Bar>
             </BarChart>
           </ResponsiveContainer>

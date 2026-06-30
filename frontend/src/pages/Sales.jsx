@@ -69,21 +69,22 @@ const ProductSearchPicker = ({ products, selectedProduct, onSelect, onClear }) =
   );
 };
 
-/* Custom bar label rendered INSIDE the bar (center, white text) */
-const InsideBarLabel = (props) => {
+/* Product name rendered inside the bar, rotated 90deg for tall bars */
+const InsideNameLabel = (props) => {
   const { x, y, width, height, value } = props;
-  if (!value || height < 20) return null;
+  if (!value || height < 30) return null;
+  const maxChars = Math.max(2, Math.floor(height / 9));
+  const display = value.length > maxChars ? value.substring(0, maxChars) + '…' : value;
   return (
     <text
       x={x + width / 2}
-      y={y + height / 2}
+      y={y + height - 8}
       textAnchor="middle"
-      dominantBaseline="middle"
-      fill="#fff"
-      fontSize={11}
-      fontWeight={700}
+      fill="rgba(255,255,255,0.75)"
+      fontSize={10}
+      fontWeight={600}
     >
-      {value}
+      {display}
     </text>
   );
 };
@@ -141,7 +142,7 @@ const Sales = () => {
 
   // Sales history filters
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeDays, setActiveDays] = useState(30); // default: show last 30 days
+  const [activeDays, setActiveDays] = useState(0); // default: show All
 
   const { showToast, ToastComponent } = useToast();
 
@@ -317,9 +318,12 @@ const Sales = () => {
                 />
                 <YAxis width={0} tick={false} tickLine={false} axisLine={false} />
                 <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(99,102,241,0.08)' }} />
-                <Bar dataKey="total_sold" name="Units Sold" radius={[6, 6, 0, 0]}>
+                <Bar dataKey="total_sold" name="Units Sold" radius={[4, 4, 0, 0]}>
                   {topSelling.slice(0, 6).map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
-                  <LabelList content={<InsideBarLabel />} />
+                  {/* Number above the bar */}
+                  <LabelList dataKey="total_sold" position="top" style={{ fill: '#e5e7eb', fontSize: 12, fontWeight: 700 }} />
+                  {/* Product name inside the bar */}
+                  <LabelList dataKey="name" content={<InsideNameLabel />} />
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
