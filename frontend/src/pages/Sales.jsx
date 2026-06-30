@@ -125,9 +125,9 @@ const CustomTooltip = ({ active, payload }) => {
 const DATE_PRESETS = [
   { label: 'All', days: 0 },
   { label: 'Today', days: 1 },
-  { label: '3 Days', days: 3 },
-  { label: '7 Days', days: 7 },
-  { label: '30 Days', days: 30 },
+  { label: '3 D', days: 3 },
+  { label: '7 D', days: 7 },
+  { label: '30 D', days: 30 },
 ];
 
 const Sales = () => {
