@@ -4,26 +4,22 @@ import StatCard from '../components/StatCard';
 import { useToast } from '../components/Toast';
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, CartesianGrid, LabelList,
-} from 'recharts';
-
-// Number shown above the bar, name shown VERTICALLY inside the bar
-const InsideNameLabel = (props) => {
-  const { x, y, width, height, value } = props;
-  if (!value || height < 30 || width < 14) return null;
-  const maxChars = Math.max(1, Math.floor(height / 7));
-  const display = value.length > maxChars ? value.substring(0, maxChars) + '…' : value;
+/* XAxis tick — horizontal name below bar, hidden on mobile */
+const CustomXAxisTick = ({ x, y, payload }) => {
+  const name = payload.value || '';
+  const maxChars = 10;
+  const display = name.length > maxChars ? name.substring(0, maxChars) + '…' : name;
   return (
-    <text
-      x={x + width / 2}
-      y={y + height - 6}
-      textAnchor="end"
-      fill="rgba(255,255,255,0.85)"
-      fontSize={10}
-      fontWeight={600}
-      transform={`rotate(-90, ${x + width / 2}, ${y + height - 6})`}
-    >
-      {display}
-    </text>
+    <g transform={`translate(${x},${y})`} className="hidden md:block">
+      <text
+        x={0} y={0} dy={16}
+        textAnchor="middle"
+        fill="#9ca3af"
+        fontSize={11}
+      >
+        {display}
+      </text>
+    </g>
   );
 };
 
@@ -103,10 +99,16 @@ const Dashboard = () => {
           </div>
         ) : (
           <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={chartData} margin={{ top: 20, right: 10, left: 10, bottom: 4 }}>
+            <BarChart data={chartData} margin={{ top: 24, right: 10, left: 10, bottom: 20 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" vertical={false} />
-              <XAxis dataKey="name" hide />
-              {/* Y-axis hidden — numbers shown above bars, names inside bars */}
+              <XAxis
+                dataKey="name"
+                tick={<CustomXAxisTick />}
+                interval={0}
+                tickLine={false}
+                axisLine={false}
+                height={30}
+              />
               <YAxis width={0} tick={false} tickLine={false} axisLine={false} />
               <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(99,102,241,0.08)' }} />
               <Bar dataKey="total_sold" radius={[6, 6, 0, 0]}>
@@ -115,8 +117,6 @@ const Dashboard = () => {
                 ))}
                 {/* Number above the bar */}
                 <LabelList dataKey="total_sold" position="top" style={{ fill: '#e5e7eb', fontSize: 12, fontWeight: 700 }} />
-                {/* Product name inside the bar */}
-                <LabelList dataKey="name" content={<InsideNameLabel />} />
               </Bar>
             </BarChart>
           </ResponsiveContainer>
