@@ -338,6 +338,55 @@ app.post('/api/sales', async (req, res) => {
   }
 });
 
+// POST /api/sales/return
+app.post('/api/sales/return', async (req, res) => {
+  const shopId = getShopId(req);
+  const { sale_id, return_quantity } = req.body;
+
+  if (!sale_id || !return_quantity || return_quantity <= 0) {
+    return res.status(400).json({ error: 'Invalid return data' });
+  }
+
+  const conn = await db.getConnection();
+  try {
+    const [[sale]] = await conn.query('SELECT * FROM sales WHERE id=? AND shop_id=?', [sale_id, shopId]);
+    if (!sale) return res.status(404).json({ error: 'Sale not found' });
+
+    if (return_quantity > sale.quantity) {
+      return res.status(400).json({ error: 'Cannot return more than purchased' });
+    }
+
+    await conn.beginTransaction();
+
+    // 1. Restore stock
+    await conn.query('UPDATE products SET stock = stock + ? WHERE id = ? AND shop_id = ?', [return_quantity, sale.product_id, shopId]);
+
+    // 2. Adjust sale record
+    if (return_quantity === sale.quantity) {
+      // Full return: delete the sale entirely
+      await conn.query('DELETE FROM sales WHERE id = ?', [sale_id]);
+    } else {
+      // Partial return: reduce quantity and price proportionally
+      const unitPrice = sale.total_price / sale.quantity;
+      const newQuantity = sale.quantity - return_quantity;
+      const newTotalPrice = unitPrice * newQuantity;
+      await conn.query(
+        'UPDATE sales SET quantity = ?, total_price = ? WHERE id = ?',
+        [newQuantity, newTotalPrice, sale_id]
+      );
+    }
+
+    await conn.commit();
+    res.json({ message: 'Return processed successfully' });
+  } catch (err) {
+    await conn.rollback();
+    console.error(err);
+    res.status(500).json({ error: 'Failed to process return' });
+  } finally {
+    conn.release();
+  }
+});
+
 // DELETE /api/purchases
 app.delete('/api/purchases', async (req, res) => {
   const shopId = getShopId(req);

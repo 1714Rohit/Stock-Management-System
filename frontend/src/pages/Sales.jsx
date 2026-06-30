@@ -101,6 +101,8 @@ const Sales = () => {
   const [modalOpen, setModalOpen] = useState(false);
   const [form, setForm] = useState({ product_id: '', quantity: '1' });
   const [selectedProduct, setSelectedProduct] = useState(null);
+  const [returnModal, setReturnModal] = useState(null); // { sale_id, product_name, max_qty }
+  const [returnQty, setReturnQty] = useState('1');
   const { showToast, ToastComponent } = useToast();
 
   const { data, isLoading: loading } = useQuery({
@@ -152,6 +154,30 @@ const Sales = () => {
     onError: (err) => showToast(err.message || 'Error recording sale', 'error')
   });
 
+  const returnMutation = useMutation({
+    mutationFn: async ({ sale_id, return_quantity }) => {
+      const res = await api.returnSale({ sale_id, return_quantity });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to process return');
+      return data;
+    },
+    onSuccess: () => {
+      showToast(`Return of ${returnQty} item(s) processed! Stock restored.`, 'success');
+      setReturnModal(null);
+      setReturnQty('1');
+      queryClient.invalidateQueries(['salesData']);
+      queryClient.invalidateQueries(['dashboardData']);
+      queryClient.invalidateQueries(['products']);
+    },
+    onError: (err) => showToast(err.message || 'Error processing return', 'error')
+  });
+
+  const handleReturnSubmit = (e) => {
+    e.preventDefault();
+    if (!returnModal) return;
+    returnMutation.mutate({ sale_id: returnModal.sale_id, return_quantity: parseInt(returnQty) });
+  };
+
   const handleSaleSubmit = (e) => {
     e.preventDefault();
     if (!selectedProduct) return;
@@ -160,7 +186,7 @@ const Sales = () => {
 
   const saving = mutation.isPending;
 
-  const COLORS = ['#6366f1','#8b5cf6','#a78bfa','#818cf8','#4f46e5'];
+  const COLORS = ['#6366f1','#8b5cf6','#a78bfa','#818cf8','#4f46e5','#7c3aed'];
 
   return (
     <div className="flex flex-col h-full">
@@ -232,13 +258,13 @@ const Sales = () => {
           <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5">
             <h3 className="text-sm font-semibold text-white mb-4">Best Selling Products</h3>
             <ResponsiveContainer width="100%" height={220}>
-              <BarChart data={topSelling.slice(0, 8)} margin={{ top: 24, right: 10, left: 10, bottom: -20 }}>
+              <BarChart data={topSelling.slice(0, 6)} margin={{ top: 24, right: 10, left: 10, bottom: -20 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" vertical={false} />
                 <XAxis dataKey="name" tick={<CustomXAxisTick />} interval={0} tickLine={false} axisLine={false} height={50} />
                 <YAxis width={0} tick={false} tickLine={false} axisLine={false} />
                 <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(99,102,241,0.08)' }} />
                 <Bar dataKey="total_sold" name="Units Sold" radius={[4, 4, 0, 0]}>
-                  {topSelling.slice(0, 8).map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                  {topSelling.slice(0, 6).map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
                   <LabelList dataKey="total_sold" position="top" style={{ fill: '#e5e7eb', fontSize: 12, fontWeight: 700 }} />
                 </Bar>
               </BarChart>
@@ -263,17 +289,27 @@ const Sales = () => {
                     <th className="px-5 py-3 font-semibold text-center bg-gray-900">Qty</th>
                     <th className="px-5 py-3 font-semibold text-right bg-gray-900">Amount</th>
                     <th className="px-5 py-3 font-semibold text-right bg-gray-900 hidden sm:table-cell">Date &amp; Time</th>
+                    <th className="px-3 py-3 font-semibold bg-gray-900"></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-800/60">
                   {history.map((s, idx) => (
-                    <tr key={s.id} className="hover:bg-gray-800/30 transition-colors">
+                    <tr key={s.id} className="hover:bg-gray-800/30 transition-colors group">
                       <td className="px-5 py-3 text-gray-600 text-xs">{idx + 1}</td>
-                      <td className="px-5 py-3 font-medium text-white">{s.product_name}</td>
+                      <td className="px-5 py-3 font-medium text-white max-w-[120px] truncate">{s.product_name}</td>
                       <td className="px-5 py-3 text-center text-indigo-300 font-semibold">{s.quantity}</td>
                       <td className="px-5 py-3 text-right text-emerald-400 font-semibold">{fmt(s.total_price)}</td>
                       <td className="px-5 py-3 text-right text-gray-500 text-xs hidden sm:table-cell">
                         {new Date(s.sale_date).toLocaleString('en-IN')}
+                      </td>
+                      <td className="px-3 py-3">
+                        <button
+                          onClick={() => { setReturnModal({ sale_id: s.id, product_name: s.product_name, max_qty: s.quantity }); setReturnQty('1'); }}
+                          title="Process Return"
+                          className="opacity-0 group-hover:opacity-100 text-amber-400 hover:text-amber-300 hover:bg-amber-900/20 p-1.5 rounded-lg transition-all text-xs font-medium flex items-center gap-1"
+                        >
+                          ↩ Return
+                        </button>
                       </td>
                     </tr>
                   ))}
@@ -343,6 +379,48 @@ const Sales = () => {
                   <button type="button" onClick={() => setModalOpen(false)} className="flex-1 bg-gray-800 hover:bg-gray-700 text-white text-sm font-medium py-2.5 rounded-xl transition-colors">Cancel</button>
                   <button type="submit" disabled={saving || !selectedProduct} className="flex-1 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 text-white text-sm font-semibold py-2.5 rounded-xl transition-colors shadow-lg shadow-emerald-900/40">
                     {saving ? 'Recording...' : 'Complete Sale ₹'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Return Items Modal */}
+      {returnModal && (
+        <div
+          className="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-sm"
+          onClick={(e) => { if (e.target === e.currentTarget) setReturnModal(null); }}
+        >
+          <div className="flex min-h-full items-center justify-center p-4">
+            <div className="w-full max-w-sm bg-gray-900 border border-gray-800 rounded-2xl p-6 shadow-2xl">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-bold text-white">Process Return</h3>
+                <button onClick={() => setReturnModal(null)} className="text-gray-500 hover:text-red-400 text-2xl leading-none">&times;</button>
+              </div>
+              <div className="bg-amber-950/30 border border-amber-800/40 rounded-xl px-4 py-3 mb-4">
+                <p className="text-sm text-gray-300">Product: <span className="font-semibold text-white">{returnModal.product_name}</span></p>
+                <p className="text-xs text-gray-400 mt-0.5">Original qty sold: <span className="font-bold text-amber-300">{returnModal.max_qty} units</span></p>
+              </div>
+              <form onSubmit={handleReturnSubmit} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-medium text-gray-400 mb-1.5">How many items are being returned?</label>
+                  <input
+                    type="number"
+                    min="1"
+                    max={returnModal.max_qty}
+                    required
+                    value={returnQty}
+                    onChange={e => setReturnQty(e.target.value)}
+                    className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-amber-500"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Max: {returnModal.max_qty} units. Stock will be restored and revenue adjusted.</p>
+                </div>
+                <div className="flex gap-3">
+                  <button type="button" onClick={() => setReturnModal(null)} className="flex-1 bg-gray-800 hover:bg-gray-700 text-white text-sm font-medium py-2.5 rounded-xl transition-colors">Cancel</button>
+                  <button type="submit" disabled={returnMutation.isPending} className="flex-1 bg-amber-600 hover:bg-amber-500 disabled:opacity-60 text-white text-sm font-semibold py-2.5 rounded-xl transition-colors shadow-lg shadow-amber-900/40">
+                    {returnMutation.isPending ? 'Processing...' : 'Confirm Return'}
                   </button>
                 </div>
               </form>

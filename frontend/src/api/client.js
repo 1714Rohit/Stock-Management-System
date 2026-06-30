@@ -42,6 +42,7 @@ export const api = {
   // Sales
   getSaleHistory: (limit = 50) => request(`/sales/history?limit=${limit}`),
   recordSale: (data) => request('/sales', { method: 'POST', body: JSON.stringify(data) }),
+  returnSale: (data) => request('/sales/return', { method: 'POST', body: JSON.stringify(data) }),
 
   // Purchases
   getPurchaseHistory: (limit = 30) => request(`/purchases/history?limit=${limit}`),

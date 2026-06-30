@@ -57,7 +57,7 @@ const Dashboard = () => {
       const chartRaw = await chartRes.json();
       return {
         stats: statsData,
-        chartData: chartRaw.filter(p => p.total_sold > 0)
+        chartData: chartRaw.filter(p => p.total_sold > 0).slice(0, 6)
       };
     }
   });
@@ -110,7 +110,7 @@ const Dashboard = () => {
                 interval={0}
                 tickLine={false}
                 axisLine={false}
-                height={10}
+                height={50}
               />
               {/* Hide Y-axis labels — values shown via LabelList on top of bars */}
               <YAxis width={0} tick={false} tickLine={false} axisLine={false} />
