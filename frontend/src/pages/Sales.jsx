@@ -69,43 +69,24 @@ const ProductSearchPicker = ({ products, selectedProduct, onSelect, onClear }) =
   );
 };
 
-/* Product name rendered inside the bar, rotated 90deg for tall bars */
+/* Product name rendered INSIDE the bar — horizontal, centered, truncated */
 const InsideNameLabel = (props) => {
   const { x, y, width, height, value } = props;
-  if (!value || height < 30) return null;
-  const maxChars = Math.max(2, Math.floor(height / 9));
+  if (!value || height < 25 || width < 20) return null;
+  // Estimate how many chars fit given bar width (approx 6px per char at font-size 10)
+  const maxChars = Math.max(1, Math.floor(width / 6.5));
   const display = value.length > maxChars ? value.substring(0, maxChars) + '…' : value;
   return (
     <text
       x={x + width / 2}
-      y={y + height - 8}
+      y={y + height - 10}
       textAnchor="middle"
-      fill="rgba(255,255,255,0.75)"
+      fill="rgba(255,255,255,0.8)"
       fontSize={10}
       fontWeight={600}
     >
       {display}
     </text>
-  );
-};
-
-/* Product name shown below bar, rotated to avoid overlap */
-const CustomXAxisTick = ({ x, y, payload }) => {
-  const name = payload.value || '';
-  const maxChars = 8;
-  const display = name.length > maxChars ? name.substring(0, maxChars) + '…' : name;
-  return (
-    <g transform={`translate(${x},${y})`}>
-      <text
-        x={0} y={0} dy={12}
-        textAnchor="end"
-        fill="#9ca3af"
-        fontSize={10}
-        transform="rotate(-35)"
-      >
-        {display}
-      </text>
-    </g>
   );
 };
 
@@ -122,13 +103,13 @@ const CustomTooltip = ({ active, payload }) => {
   return null;
 };
 
-/* Quick date filter presets */
+/* Quick date filter presets — 'today' and 'yesterday' are exact date matches */
 const DATE_PRESETS = [
-  { label: 'All', days: 0 },
-  { label: 'Today', days: 1 },
-  { label: '3 D', days: 3 },
-  { label: '7 D', days: 7 },
-  { label: '30 D', days: 30 },
+  { label: 'All', days: 'all' },
+  { label: 'Today', days: 'today' },
+  { label: 'Yesterday', days: 'yesterday' },
+  { label: '7 Days', days: 7 },
+  { label: '30 Days', days: 30 },
 ];
 
 const Sales = () => {
@@ -142,7 +123,7 @@ const Sales = () => {
 
   // Sales history filters
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeDays, setActiveDays] = useState(0); // default: show All
+  const [activeDays, setActiveDays] = useState('all'); // default: show All
 
   const { showToast, ToastComponent } = useToast();
 
@@ -166,15 +147,29 @@ const Sales = () => {
 
   const { products = [], history = [], stats = null, topSelling = [] } = data || {};
 
-  // Apply client-side filters
+  // Apply client-side filters with proper Today/Yesterday detection
   const filteredHistory = history.filter(s => {
     const matchName = s.product_name.toLowerCase().includes(searchQuery.toLowerCase());
     if (!matchName) return false;
-    if (activeDays === 0) return true; // "All"
-    const cutoff = new Date();
-    cutoff.setDate(cutoff.getDate() - activeDays);
+    if (activeDays === 'all') return true;
+
+    // Use local date strings (YYYY-MM-DD) to compare dates correctly in any timezone
+    const saleDate = new Date(s.sale_date);
+    const saleDateStr = saleDate.toLocaleDateString('en-CA'); // gives YYYY-MM-DD in local tz
+    const now = new Date();
+    const todayStr = now.toLocaleDateString('en-CA');
+    const yesterday = new Date(now);
+    yesterday.setDate(now.getDate() - 1);
+    const yesterdayStr = yesterday.toLocaleDateString('en-CA');
+
+    if (activeDays === 'today') return saleDateStr === todayStr;
+    if (activeDays === 'yesterday') return saleDateStr === yesterdayStr;
+
+    // For numeric days: show last N days (inclusive)
+    const cutoff = new Date(now);
+    cutoff.setDate(now.getDate() - activeDays);
     cutoff.setHours(0, 0, 0, 0);
-    return new Date(s.sale_date) >= cutoff;
+    return saleDate >= cutoff;
   });
 
   const handleProductSelect = (p) => {
@@ -301,21 +296,14 @@ const Sales = () => {
           </div>
         )}
 
-        {/* Best Selling Chart — labels inside bars, names rotated below */}
+        {/* Best Selling Chart — numbers above bar, product names inside bar */}
         {topSelling.length > 0 && (
           <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5">
             <h3 className="text-sm font-semibold text-white mb-4">Best Selling Products</h3>
             <ResponsiveContainer width="100%" height={200}>
-              <BarChart data={topSelling.slice(0, 6)} margin={{ top: 8, right: 10, left: 10, bottom: 40 }}>
+              <BarChart data={topSelling.slice(0, 6)} margin={{ top: 20, right: 10, left: 10, bottom: 4 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" vertical={false} />
-                <XAxis
-                  dataKey="name"
-                  tick={<CustomXAxisTick />}
-                  interval={0}
-                  tickLine={false}
-                  axisLine={false}
-                  height={55}
-                />
+                <XAxis dataKey="name" hide />
                 <YAxis width={0} tick={false} tickLine={false} axisLine={false} />
                 <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(99,102,241,0.08)' }} />
                 <Bar dataKey="total_sold" name="Units Sold" radius={[4, 4, 0, 0]}>

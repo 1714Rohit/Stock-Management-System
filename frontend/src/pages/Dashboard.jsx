@@ -9,40 +9,20 @@ import {
 // Number shown above the bar, name shown inside the bar (bottom-aligned)
 const InsideNameLabel = (props) => {
   const { x, y, width, height, value } = props;
-  if (!value || height < 30) return null;
-  const maxChars = Math.max(2, Math.floor(height / 9));
+  if (!value || height < 25 || width < 20) return null;
+  const maxChars = Math.max(1, Math.floor(width / 6.5));
   const display = value.length > maxChars ? value.substring(0, maxChars) + '…' : value;
   return (
     <text
       x={x + width / 2}
-      y={y + height - 8}
+      y={y + height - 10}
       textAnchor="middle"
-      fill="rgba(255,255,255,0.75)"
+      fill="rgba(255,255,255,0.8)"
       fontSize={10}
       fontWeight={600}
     >
       {display}
     </text>
-  );
-};
-
-// X-Axis label: truncated + rotated so names never overlap
-const CustomXAxisTick = ({ x, y, payload }) => {
-  const name = payload.value || '';
-  const maxChars = 8;
-  const display = name.length > maxChars ? name.substring(0, maxChars) + '…' : name;
-  return (
-    <g transform={`translate(${x},${y})`}>
-      <text
-        x={0} y={0} dy={12}
-        textAnchor="end"
-        fill="#9ca3af"
-        fontSize={10}
-        transform="rotate(-35)"
-      >
-        {display}
-      </text>
-    </g>
   );
 };
 
@@ -122,17 +102,10 @@ const Dashboard = () => {
           </div>
         ) : (
           <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={chartData} margin={{ top: 8, right: 10, left: 10, bottom: 50 }}>
+            <BarChart data={chartData} margin={{ top: 20, right: 10, left: 10, bottom: 4 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" vertical={false} />
-              <XAxis
-                dataKey="name"
-                tick={<CustomXAxisTick />}
-                interval={0}
-                tickLine={false}
-                axisLine={false}
-                height={60}
-              />
-              {/* Hide Y-axis labels — values shown inside bars */}
+              <XAxis dataKey="name" hide />
+              {/* Y-axis hidden — numbers shown above bars, names inside bars */}
               <YAxis width={0} tick={false} tickLine={false} axisLine={false} />
               <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(99,102,241,0.08)' }} />
               <Bar dataKey="total_sold" radius={[6, 6, 0, 0]}>
