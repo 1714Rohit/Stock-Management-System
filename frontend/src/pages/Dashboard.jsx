@@ -6,19 +6,38 @@ import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, CartesianGrid, LabelList,
 } from 'recharts';
 
-// Custom X-Axis tick: truncates long names to fit cleanly under each bar
+// Bar label rendered inside the bar (white, centered)
+const InsideBarLabel = (props) => {
+  const { x, y, width, height, value } = props;
+  if (!value || height < 20) return null;
+  return (
+    <text
+      x={x + width / 2}
+      y={y + height / 2}
+      textAnchor="middle"
+      dominantBaseline="middle"
+      fill="#fff"
+      fontSize={11}
+      fontWeight={700}
+    >
+      {value}
+    </text>
+  );
+};
+
+// X-Axis label: truncated + rotated -35deg so names never overlap
 const CustomXAxisTick = ({ x, y, payload }) => {
-  const maxChars = 10;
   const name = payload.value || '';
+  const maxChars = 8;
   const display = name.length > maxChars ? name.substring(0, maxChars) + '…' : name;
   return (
     <g transform={`translate(${x},${y})`}>
       <text
-        x={0} y={0} dy={14}
-        textAnchor="middle"
+        x={0} y={0} dy={12}
+        textAnchor="end"
         fill="#9ca3af"
-        fontSize={11}
-        fontFamily="Plus Jakarta Sans, sans-serif"
+        fontSize={10}
+        transform="rotate(-35)"
       >
         {display}
       </text>
@@ -102,7 +121,7 @@ const Dashboard = () => {
           </div>
         ) : (
           <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={chartData} margin={{ top: 24, right: 10, left: 10, bottom: 30 }}>
+            <BarChart data={chartData} margin={{ top: 8, right: 10, left: 10, bottom: 50 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" vertical={false} />
               <XAxis
                 dataKey="name"
@@ -110,20 +129,16 @@ const Dashboard = () => {
                 interval={0}
                 tickLine={false}
                 axisLine={false}
-                height={50}
+                height={60}
               />
-              {/* Hide Y-axis labels — values shown via LabelList on top of bars */}
+              {/* Hide Y-axis labels — values shown inside bars */}
               <YAxis width={0} tick={false} tickLine={false} axisLine={false} />
               <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(99,102,241,0.08)' }} />
               <Bar dataKey="total_sold" radius={[6, 6, 0, 0]}>
                 {chartData.map((_, i) => (
                   <Cell key={i} fill={COLORS[i % COLORS.length]} />
                 ))}
-                <LabelList
-                  dataKey="total_sold"
-                  position="top"
-                  style={{ fill: '#e5e7eb', fontSize: 12, fontWeight: 700 }}
-                />
+                <LabelList content={<InsideBarLabel />} />
               </Bar>
             </BarChart>
           </ResponsiveContainer>

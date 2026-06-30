@@ -8,8 +8,9 @@ import {
 } from 'recharts';
 
 const fmt = (n) => `₹${parseFloat(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
+const toInputDate = (d) => d.toISOString().split('T')[0];
 
-/* Product search picker — replaces <select> */
+/* Product search picker */
 const ProductSearchPicker = ({ products, selectedProduct, onSelect, onClear }) => {
   const [query, setQuery] = useState(selectedProduct ? selectedProduct.name : '');
   const [open, setOpen] = useState(false);
@@ -68,20 +69,45 @@ const ProductSearchPicker = ({ products, selectedProduct, onSelect, onClear }) =
   );
 };
 
+/* Custom bar label rendered INSIDE the bar (center, white text) */
+const InsideBarLabel = (props) => {
+  const { x, y, width, height, value } = props;
+  if (!value || height < 20) return null;
+  return (
+    <text
+      x={x + width / 2}
+      y={y + height / 2}
+      textAnchor="middle"
+      dominantBaseline="middle"
+      fill="#fff"
+      fontSize={11}
+      fontWeight={700}
+    >
+      {value}
+    </text>
+  );
+};
+
+/* Product name shown below bar, rotated to avoid overlap */
 const CustomXAxisTick = ({ x, y, payload }) => {
-  const maxChars = 10;
   const name = payload.value || '';
+  const maxChars = 8;
   const display = name.length > maxChars ? name.substring(0, maxChars) + '…' : name;
   return (
     <g transform={`translate(${x},${y})`}>
-      <text x={0} y={0} dy={14} textAnchor="middle" fill="#9ca3af" fontSize={11}>
+      <text
+        x={0} y={0} dy={12}
+        textAnchor="end"
+        fill="#9ca3af"
+        fontSize={10}
+        transform="rotate(-35)"
+      >
         {display}
       </text>
     </g>
   );
 };
 
-// Matches the dashboard chart hover card so sales details stay consistent.
 const CustomTooltip = ({ active, payload }) => {
   if (active && payload?.length) {
     return (
@@ -95,14 +121,28 @@ const CustomTooltip = ({ active, payload }) => {
   return null;
 };
 
+/* Quick date filter presets */
+const DATE_PRESETS = [
+  { label: 'All', days: 0 },
+  { label: 'Today', days: 1 },
+  { label: '3 Days', days: 3 },
+  { label: '7 Days', days: 7 },
+  { label: '30 Days', days: 30 },
+];
+
 const Sales = () => {
   const queryClient = useQueryClient();
   const [tab, setTab] = useState('today');
   const [modalOpen, setModalOpen] = useState(false);
   const [form, setForm] = useState({ product_id: '', quantity: '1' });
   const [selectedProduct, setSelectedProduct] = useState(null);
-  const [returnModal, setReturnModal] = useState(null); // { sale_id, product_name, max_qty }
+  const [returnModal, setReturnModal] = useState(null);
   const [returnQty, setReturnQty] = useState('1');
+
+  // Sales history filters
+  const [searchQuery, setSearchQuery] = useState('');
+  const [activeDays, setActiveDays] = useState(30); // default: show last 30 days
+
   const { showToast, ToastComponent } = useToast();
 
   const { data, isLoading: loading } = useQuery({
@@ -110,7 +150,7 @@ const Sales = () => {
     queryFn: async () => {
       const [pRes, hRes, sRes, tRes] = await Promise.all([
         api.getProducts(),
-        api.getSaleHistory(30),
+        api.getSaleHistory(365), // fetch more, we'll filter client-side
         api.getStats(),
         api.getTopSelling(),
       ]);
@@ -124,6 +164,17 @@ const Sales = () => {
   });
 
   const { products = [], history = [], stats = null, topSelling = [] } = data || {};
+
+  // Apply client-side filters
+  const filteredHistory = history.filter(s => {
+    const matchName = s.product_name.toLowerCase().includes(searchQuery.toLowerCase());
+    if (!matchName) return false;
+    if (activeDays === 0) return true; // "All"
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - activeDays);
+    cutoff.setHours(0, 0, 0, 0);
+    return new Date(s.sale_date) >= cutoff;
+  });
 
   const handleProductSelect = (p) => {
     setSelectedProduct(p);
@@ -162,7 +213,7 @@ const Sales = () => {
       return data;
     },
     onSuccess: () => {
-      showToast(`Return of ${returnQty} item(s) processed! Stock restored.`, 'success');
+      showToast(`Return of ${returnQty} item(s) processed! Stock restored.`);
       setReturnModal(null);
       setReturnQty('1');
       queryClient.invalidateQueries(['salesData']);
@@ -193,8 +244,7 @@ const Sales = () => {
       {ToastComponent}
 
       {/* ── Fixed Header ── */}
-      <div className="flex-shrink-0 px-4 pt-4 pb-3 md:px-6 md:pt-5 border-b border-gray-800/60 space-y-4">
-        {/* Title row */}
+      <div className="flex-shrink-0 px-4 pt-4 pb-3 md:px-6 md:pt-5 border-b border-gray-800/60">
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-lg font-bold text-white">Sales Overview</h2>
@@ -207,10 +257,7 @@ const Sales = () => {
             <span className="text-base">+</span> New Sale
           </button>
         </div>
-
       </div>
-
-      
 
       {/* ── Scrollable Content ── */}
       <div className="flex-1 overflow-y-auto px-4 py-4 md:px-6 pb-24 md:pb-6 space-y-5">
@@ -253,69 +300,140 @@ const Sales = () => {
           </div>
         )}
 
-        {/* Best Selling Chart */}
+        {/* Best Selling Chart — labels inside bars, names rotated below */}
         {topSelling.length > 0 && (
           <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5">
             <h3 className="text-sm font-semibold text-white mb-4">Best Selling Products</h3>
-            <ResponsiveContainer width="100%" height={220}>
-              <BarChart data={topSelling.slice(0, 6)} margin={{ top: 24, right: 10, left: 10, bottom: -20 }}>
+            <ResponsiveContainer width="100%" height={200}>
+              <BarChart data={topSelling.slice(0, 6)} margin={{ top: 8, right: 10, left: 10, bottom: 40 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" vertical={false} />
-                <XAxis dataKey="name" tick={<CustomXAxisTick />} interval={0} tickLine={false} axisLine={false} height={50} />
+                <XAxis
+                  dataKey="name"
+                  tick={<CustomXAxisTick />}
+                  interval={0}
+                  tickLine={false}
+                  axisLine={false}
+                  height={55}
+                />
                 <YAxis width={0} tick={false} tickLine={false} axisLine={false} />
                 <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(99,102,241,0.08)' }} />
-                <Bar dataKey="total_sold" name="Units Sold" radius={[4, 4, 0, 0]}>
+                <Bar dataKey="total_sold" name="Units Sold" radius={[6, 6, 0, 0]}>
                   {topSelling.slice(0, 6).map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
-                  <LabelList dataKey="total_sold" position="top" style={{ fill: '#e5e7eb', fontSize: 12, fontWeight: 700 }} />
+                  <LabelList content={<InsideBarLabel />} />
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
           </div>
         )}
 
-        {/* Recent Sales History */}
-        <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden flex flex-col h-[400px] md:h-[500px]">
-          <div className="px-5 py-4 border-b border-gray-800 flex-shrink-0">
-            <h3 className="text-sm font-semibold text-white">Recent Sales History</h3>
-          </div>
-          {history.length === 0 ? (
-            <p className="text-gray-500 text-sm text-center py-8">No sales recorded yet.</p>
-          ) : (
-            <div className="overflow-auto flex-1">
-              <table className="w-full text-sm relative">
-                <thead className="sticky top-0 z-10 border-b border-gray-800 shadow-sm">
-                  <tr className="text-left text-xs text-gray-500 uppercase tracking-wider">
-                    <th className="px-5 py-3 font-semibold bg-gray-900">No.</th>
-                    <th className="px-5 py-3 font-semibold bg-gray-900">Product</th>
-                    <th className="px-5 py-3 font-semibold text-center bg-gray-900">Qty</th>
-                    <th className="px-5 py-3 font-semibold text-right bg-gray-900">Amount</th>
-                    <th className="px-5 py-3 font-semibold text-right bg-gray-900 hidden sm:table-cell">Date &amp; Time</th>
-                    <th className="px-3 py-3 font-semibold bg-gray-900"></th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-800/60">
-                  {history.map((s, idx) => (
-                    <tr key={s.id} className="hover:bg-gray-800/30 transition-colors group">
-                      <td className="px-5 py-3 text-gray-600 text-xs">{idx + 1}</td>
-                      <td className="px-5 py-3 font-medium text-white max-w-[120px] truncate">{s.product_name}</td>
-                      <td className="px-5 py-3 text-center text-indigo-300 font-semibold">{s.quantity}</td>
-                      <td className="px-5 py-3 text-right text-emerald-400 font-semibold">{fmt(s.total_price)}</td>
-                      <td className="px-5 py-3 text-right text-gray-500 text-xs hidden sm:table-cell">
-                        {new Date(s.sale_date).toLocaleString('en-IN')}
-                      </td>
-                      <td className="px-3 py-3">
-                        <button
-                          onClick={() => { setReturnModal({ sale_id: s.id, product_name: s.product_name, max_qty: s.quantity }); setReturnQty('1'); }}
-                          title="Process Return"
-                          className="opacity-0 group-hover:opacity-100 text-amber-400 hover:text-amber-300 hover:bg-amber-900/20 p-1.5 rounded-lg transition-all text-xs font-medium flex items-center gap-1"
-                        >
-                          ↩ Return
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+        {/* Sales History */}
+        <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
+
+          {/* Header + Filters */}
+          <div className="px-4 py-3 border-b border-gray-800 space-y-3">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-white">Sales History</h3>
+              <span className="text-xs text-gray-500">{filteredHistory.length} entries</span>
             </div>
+
+            {/* Search by product name */}
+            <div className="relative">
+              <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-500 text-sm pointer-events-none">🔍</span>
+              <input
+                type="text"
+                placeholder="Search product name..."
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                className="w-full bg-gray-800 border border-gray-700 rounded-xl pl-9 pr-8 py-2 text-white text-sm focus:outline-none focus:border-emerald-500 transition-colors"
+              />
+              {searchQuery && (
+                <button onClick={() => setSearchQuery('')} className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-500 hover:text-white transition-colors">✕</button>
+              )}
+            </div>
+
+            {/* Quick date filter pills */}
+            <div className="flex gap-1.5 flex-wrap">
+              {DATE_PRESETS.map(p => (
+                <button
+                  key={p.label}
+                  onClick={() => setActiveDays(p.days)}
+                  className={`px-3 py-1 rounded-lg text-xs font-semibold transition-colors ${activeDays === p.days ? 'bg-indigo-600 text-white' : 'bg-gray-800 text-gray-400 hover:text-white border border-gray-700'}`}
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {loading ? (
+            <p className="text-gray-500 text-sm text-center py-8 animate-pulse">Loading sales...</p>
+          ) : filteredHistory.length === 0 ? (
+            <p className="text-gray-500 text-sm text-center py-8">
+              {searchQuery ? `No sales found for "${searchQuery}"` : 'No sales in this period.'}
+            </p>
+          ) : (
+            <>
+              {/* Mobile — card list */}
+              <div className="md:hidden divide-y divide-gray-800/60 max-h-[480px] overflow-y-auto">
+                {filteredHistory.map((s, idx) => (
+                  <div key={s.id} className="px-4 py-3 flex items-center gap-3">
+                    <span className="text-gray-600 text-xs w-5 flex-shrink-0">{idx + 1}</span>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-white text-sm truncate">{s.product_name}</p>
+                      <p className="text-xs text-gray-500 mt-0.5">{new Date(s.sale_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: '2-digit' })}</p>
+                    </div>
+                    <div className="text-right flex-shrink-0">
+                      <p className="text-emerald-400 font-bold text-sm">{fmt(s.total_price)}</p>
+                      <p className="text-xs text-indigo-300">{s.quantity} unit{s.quantity > 1 ? 's' : ''}</p>
+                    </div>
+                    <button
+                      onClick={() => { setReturnModal({ sale_id: s.id, product_name: s.product_name, max_qty: s.quantity }); setReturnQty('1'); }}
+                      title="Process Return"
+                      className="flex-shrink-0 text-amber-400 hover:text-amber-300 hover:bg-amber-900/20 p-1.5 rounded-lg transition-all text-lg"
+                    >
+                      ↩
+                    </button>
+                  </div>
+                ))}
+              </div>
+
+              {/* Desktop — table, no horizontal scroll */}
+              <div className="hidden md:block max-h-[480px] overflow-y-auto">
+                <table className="w-full text-sm">
+                  <thead className="sticky top-0 z-10 border-b border-gray-800">
+                    <tr className="text-left text-xs text-gray-500 uppercase tracking-wider">
+                      <th className="px-4 py-3 font-semibold bg-gray-900 w-8">#</th>
+                      <th className="px-4 py-3 font-semibold bg-gray-900">Product</th>
+                      <th className="px-4 py-3 font-semibold text-center bg-gray-900 w-16">Qty</th>
+                      <th className="px-4 py-3 font-semibold text-right bg-gray-900">Amount</th>
+                      <th className="px-4 py-3 font-semibold text-right bg-gray-900">Date</th>
+                      <th className="px-2 py-3 bg-gray-900 w-20"></th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-800/60">
+                    {filteredHistory.map((s, idx) => (
+                      <tr key={s.id} className="hover:bg-gray-800/30 transition-colors group">
+                        <td className="px-4 py-3 text-gray-600 text-xs">{idx + 1}</td>
+                        <td className="px-4 py-3 font-medium text-white max-w-[180px] truncate">{s.product_name}</td>
+                        <td className="px-4 py-3 text-center text-indigo-300 font-semibold">{s.quantity}</td>
+                        <td className="px-4 py-3 text-right text-emerald-400 font-semibold">{fmt(s.total_price)}</td>
+                        <td className="px-4 py-3 text-right text-gray-500 text-xs whitespace-nowrap">
+                          {new Date(s.sale_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: '2-digit' })}
+                        </td>
+                        <td className="px-2 py-3">
+                          <button
+                            onClick={() => { setReturnModal({ sale_id: s.id, product_name: s.product_name, max_qty: s.quantity }); setReturnQty('1'); }}
+                            className="opacity-0 group-hover:opacity-100 text-amber-400 hover:text-amber-300 hover:bg-amber-900/20 px-2 py-1 rounded-lg transition-all text-xs font-medium"
+                          >
+                            ↩ Return
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
           )}
         </div>
       </div>
@@ -333,7 +451,6 @@ const Sales = () => {
                 <button onClick={() => setModalOpen(false)} className="text-gray-500 hover:text-red-600 text-3xl mb-2 leading-none">&times;</button>
               </div>
               <form onSubmit={handleSaleSubmit} className="space-y-4">
-                {/* Product search picker */}
                 <div>
                   <label className="block text-xs font-medium text-gray-400 mb-1.5">Select Product</label>
                   <ProductSearchPicker
